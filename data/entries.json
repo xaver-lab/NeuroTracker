@@ -5,44 +5,82 @@
     "foods": [
       "Milchprodukte"
     ],
-    "notes": null,
+    "notes": "",
     "skin_notes": "",
     "food_notes": "",
-    "created_at": "2026-01-22T09:53:45.850573",
-    "updated_at": "2026-01-22T09:53:45.850573"
+    "created_at": "2026-01-22T11:23:31.117378",
+    "updated_at": "2026-01-22T11:23:31.117378"
   },
   "2026-01-22": {
     "date": "2026-01-22",
-    "severity": 3,
+    "severity": 4,
     "foods": [],
     "notes": "",
     "skin_notes": "",
     "food_notes": "",
-    "created_at": "2026-01-22T10:25:55.030984",
-    "updated_at": "2026-01-22T10:25:55.030984"
+    "created_at": "2026-01-22T11:29:38.831751",
+    "updated_at": "2026-01-22T11:29:38.831751"
   },
   "2026-01-20": {
     "date": "2026-01-20",
     "severity": 2,
     "foods": [
-      "Gurken"
+      "Milchprodukte"
     ],
     "notes": "",
     "skin_notes": "",
     "food_notes": "",
-    "created_at": "2026-01-22T10:26:08.432744",
-    "updated_at": "2026-01-22T10:26:08.432744"
+    "created_at": "2026-01-22T11:23:38.057155",
+    "updated_at": "2026-01-22T11:23:38.057155"
   },
   "2026-01-19": {
     "date": "2026-01-19",
     "severity": 2,
-    "foods": [
-      "Weizen"
-    ],
+    "foods": [],
     "notes": "",
     "skin_notes": "",
     "food_notes": "",
-    "created_at": "2026-01-22T10:26:19.428522",
-    "updated_at": "2026-01-22T10:26:19.428522"
+    "created_at": "2026-01-22T11:22:06.666663",
+    "updated_at": "2026-01-22T11:22:06.666663"
+  },
+  "2026-01-14": {
+    "date": "2026-01-14",
+    "severity": 4,
+    "foods": [],
+    "notes": "",
+    "skin_notes": "",
+    "food_notes": "",
+    "created_at": "2026-01-22T11:23:47.741562",
+    "updated_at": "2026-01-22T11:23:47.741562"
+  },
+  "2026-01-15": {
+    "date": "2026-01-15",
+    "severity": 4,
+    "foods": [],
+    "notes": "",
+    "skin_notes": "",
+    "food_notes": "",
+    "created_at": "2026-01-22T11:23:52.362475",
+    "updated_at": "2026-01-22T11:23:52.362475"
+  },
+  "2026-01-13": {
+    "date": "2026-01-13",
+    "severity": 4,
+    "foods": [],
+    "notes": "",
+    "skin_notes": "",
+    "food_notes": "",
+    "created_at": "2026-01-22T11:28:05.726318",
+    "updated_at": "2026-01-22T11:28:05.726318"
+  },
+  "2026-01-12": {
+    "date": "2026-01-12",
+    "severity": 4,
+    "foods": [],
+    "notes": "",
+    "skin_notes": "",
+    "food_notes": "",
+    "created_at": "2026-01-22T11:28:07.541872",
+    "updated_at": "2026-01-22T11:28:07.541872"
   }
 }
