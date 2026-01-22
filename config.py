@@ -21,10 +21,11 @@ FOOD_SUGGESTIONS_FILE = DATA_DIR / "food_suggestions.json"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 
 # Google Drive Settings
-GOOGLE_DRIVE_ENABLED = False  # Set to True to enable sync
+GOOGLE_DRIVE_ENABLED = True  # Enable Google Drive sync
 GOOGLE_CREDENTIALS_FILE = BASE_DIR / "credentials.json"
 GOOGLE_TOKEN_FILE = DATA_DIR / "token.json"
-GOOGLE_DRIVE_FOLDER = "Neuro-Tracker"  # Folder name in Google Drive
+GOOGLE_DRIVE_FOLDER_ID = "13zJsXH5CasIXnky9wBcwTXW2uh20UTb7"  # Direct folder ID
+GOOGLE_DRIVE_FOLDER = "Neuro-Tracker"  # Folder name (for display)
 SYNC_INTERVAL_MINUTES = 5  # Auto-sync every 5 minutes
 
 # UI Settings

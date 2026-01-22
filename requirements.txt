@@ -1,23 +1,11 @@
 # GUI Framework
-PyQt5==5.15.10
-PyQt5-Qt5==5.15.2
-PyQt5-sip==12.13.0
+PyQt5>=5.15.10
 
 # Google Drive Integration
-google-api-python-client==2.111.0
-google-auth-httplib2==0.2.0
-google-auth-oauthlib==1.2.0
-
-# Data Processing & Analysis
-pandas==2.1.4
-numpy==1.26.2
-
-# Charts & Visualization
-matplotlib==3.8.2
-pyqtgraph==0.13.3
+google-api-python-client>=2.188.0
+google-auth>=2.47.0
+google-auth-httplib2>=0.3.0
+google-auth-oauthlib>=1.2.4
 
 # PDF Export
-reportlab==4.0.7
-
-# Utilities
-python-dateutil==2.8.2
+reportlab>=4.0.7

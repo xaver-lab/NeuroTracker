@@ -59,6 +59,9 @@ class MainWindow(QMainWindow):
             self.sync_timer.timeout.connect(self.auto_sync)
             self.sync_timer.start(SYNC_INTERVAL_MINUTES * 60 * 1000)
 
+            # Initial sync on startup (delayed to allow UI to load)
+            QTimer.singleShot(1000, self.startup_sync)
+
         # Select today by default
         self.calendar_widget.go_today()
 
@@ -328,26 +331,81 @@ class MainWindow(QMainWindow):
                 self.calendar_widget.refresh_all()
             self.update_sync_status()
 
+    def startup_sync(self):
+        """Sync on application startup"""
+        if GOOGLE_DRIVE_ENABLED and self.drive_sync.is_connected():
+            self.statusBar.showMessage("Synchronisiere...", 0)
+            success, _ = self.drive_sync.sync()
+            if success:
+                self.calendar_widget.refresh_all()
+                self.update_entry_count()
+                self.statusBar.showMessage("Startup-Sync erfolgreich", 3000)
+            else:
+                self.statusBar.showMessage("Startup-Sync fehlgeschlagen", 3000)
+            self.update_sync_status()
+
     def show_sync_status(self):
         """Show sync status dialog"""
         status = self.drive_sync.get_status()
 
         if status['connected']:
             last_sync = status['last_sync'] or "Nie"
-            msg = f"Google Drive Status: Verbunden\n\nLetzter Sync: {last_sync}\nNächster Sync: in {SYNC_INTERVAL_MINUTES} Minuten"
+            msg = (
+                f"Google Drive Status: Verbunden ✓\n\n"
+                f"Ordner: {status['folder']}\n"
+                f"Letzter Sync: {last_sync}\n"
+                f"Auto-Sync: alle {SYNC_INTERVAL_MINUTES} Minuten"
+            )
         else:
-            msg = "Google Drive Status: Nicht verbunden\n\nVerbinde Google Drive um deine Daten automatisch zu sichern."
+            # Show diagnostic info when not connected
+            api_status = "✓ Installiert" if status.get('api_available', False) else "✗ Nicht installiert"
+            cred_status = "✓ Vorhanden" if status.get('credentials_exist', False) else "✗ Fehlt"
+
+            msg = (
+                f"Google Drive Status: Nicht verbunden\n\n"
+                f"Google API: {api_status}\n"
+                f"Credentials: {cred_status}\n\n"
+                f"Verwende 'Google Drive verbinden...' um die Verbindung herzustellen."
+            )
 
         QMessageBox.information(self, "Synchronisations-Status", msg)
 
     def connect_google_drive(self):
         """Connect to Google Drive"""
-        result = QMessageBox.information(
-            self, "Google Drive verbinden",
-            "Diese Funktion wird später implementiert.\n\n"
-            "Nach der Verbindung werden deine Daten automatisch mit Google Drive synchronisiert.",
-            QMessageBox.Ok
-        )
+        if self.drive_sync.is_connected():
+            # Already connected - offer to disconnect
+            reply = QMessageBox.question(
+                self, "Google Drive",
+                "Du bist bereits mit Google Drive verbunden.\n\n"
+                "Möchtest du die Verbindung trennen?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                success, message = self.drive_sync.disconnect()
+                self.update_sync_status()
+                QMessageBox.information(self, "Google Drive", message)
+        else:
+            # Not connected - start OAuth flow
+            reply = QMessageBox.question(
+                self, "Google Drive verbinden",
+                "Möchtest du dich mit Google Drive verbinden?\n\n"
+                "Es öffnet sich ein Browser-Fenster zur Anmeldung.\n"
+                "Nach der Verbindung werden deine Daten automatisch synchronisiert.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.Yes:
+                self.statusBar.showMessage("Verbinde mit Google Drive...", 0)
+                success, message = self.drive_sync.connect()
+                self.update_sync_status()
+
+                if success:
+                    QMessageBox.information(self, "Google Drive", message)
+                    # Initial sync after connecting
+                    self.manual_sync()
+                else:
+                    QMessageBox.warning(self, "Google Drive Fehler", message)
 
     def update_sync_status(self):
         """Update the sync status indicator"""
@@ -411,4 +469,10 @@ class MainWindow(QMainWindow):
         # Save any pending changes
         self.data_manager.save()
         self.food_manager.save()
+
+        # Sync to Google Drive before closing
+        if GOOGLE_DRIVE_ENABLED and self.drive_sync.is_connected():
+            self.statusBar.showMessage("Synchronisiere vor dem Beenden...", 0)
+            self.drive_sync.sync()
+
         event.accept()

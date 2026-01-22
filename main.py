@@ -14,9 +14,11 @@ from ui.main_window import MainWindow
 
 def main():
     """Main application entry point"""
-    # Enable High DPI scaling
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    # Enable High DPI scaling (deprecated in Qt 6, but needed for Qt 5)
+    if hasattr(Qt, 'AA_EnableHighDpiScaling'):
+        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)  # type: ignore
+    if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
+        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)  # type: ignore
 
     # Create application
     app = QApplication(sys.argv)
