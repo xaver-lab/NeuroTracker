@@ -58,16 +58,18 @@ class DataManager:
             print(f"Error saving data: {e}")
             raise
 
-    def get_entry(self, date: str) -> Optional[DayEntry]:
+    def get_entry(self, date) -> Optional[DayEntry]:
         """
         Get entry for a specific date
 
         Args:
-            date: Date in ISO format (YYYY-MM-DD)
+            date: Date in ISO format (YYYY-MM-DD) or date object
 
         Returns:
             DayEntry if exists, None otherwise
         """
+        if hasattr(date, 'isoformat'):
+            date = date.isoformat()
         return self.entries.get(date)
 
     def add_or_update_entry(self, entry: DayEntry):
@@ -80,33 +82,40 @@ class DataManager:
         self.entries[entry.date] = entry
         self.save()
 
-    def delete_entry(self, date: str) -> bool:
+    def delete_entry(self, date) -> bool:
         """
         Delete entry for a specific date
 
         Args:
-            date: Date in ISO format (YYYY-MM-DD)
+            date: Date in ISO format (YYYY-MM-DD) or date object
 
         Returns:
             True if entry was deleted, False if it didn't exist
         """
+        if hasattr(date, 'isoformat'):
+            date = date.isoformat()
         if date in self.entries:
             del self.entries[date]
             self.save()
             return True
         return False
 
-    def get_entries_in_range(self, start_date: str, end_date: str) -> List[DayEntry]:
+    def get_entries_in_range(self, start_date, end_date) -> List[DayEntry]:
         """
         Get all entries within a date range (inclusive)
 
         Args:
-            start_date: Start date in ISO format (YYYY-MM-DD)
-            end_date: End date in ISO format (YYYY-MM-DD)
+            start_date: Start date in ISO format (YYYY-MM-DD) or date object
+            end_date: End date in ISO format (YYYY-MM-DD) or date object
 
         Returns:
             List of DayEntry objects sorted by date
         """
+        if hasattr(start_date, 'isoformat'):
+            start_date = start_date.isoformat()
+        if hasattr(end_date, 'isoformat'):
+            end_date = end_date.isoformat()
+
         entries = [
             entry for date, entry in self.entries.items()
             if start_date <= date <= end_date
