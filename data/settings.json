@@ -1,0 +1,10 @@
+{
+  "modules": {
+    "stress": false,
+    "fungal": false,
+    "sleep": true,
+    "weather": false,
+    "sweating": false,
+    "contact": false
+  }
+}
