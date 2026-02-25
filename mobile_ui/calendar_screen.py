@@ -1,5 +1,5 @@
 """
-Calendar Screen – 2-week calendar view with color-coded day cards.
+Calendar Screen – 2-week calendar view with color-coded day cards (KivyMD 1.2.0).
 Replaces ui/calendar_widget.py + ui/day_card.py.
 """
 
@@ -8,15 +8,14 @@ from typing import Optional, Dict
 
 from kivy.metrics import dp
 from kivy.clock import Clock
-from kivy.utils import get_color_from_hex
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.behaviors import ButtonBehavior
 
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
 from kivymd.uix.button import MDIconButton
-from kivymd.uix.card import MDCard
-from kivymd.uix.scrollview import MDScrollView
-from kivymd.uix.gridlayout import MDGridLayout
+from kivymd.uix.card import MDCard, MDSeparator
 
 from config import (
     SEVERITY_COLORS, WEEKS_TO_DISPLAY, FIRST_DAY_OF_WEEK,
@@ -24,15 +23,31 @@ from config import (
 )
 
 
-class DayCardWidget(MDCard):
-    """A single day card in the calendar grid."""
+def _hex_to_rgba(hex_color: str) -> list:
+    hex_color = hex_color.lstrip("#")
+    r = int(hex_color[0:2], 16) / 255
+    g = int(hex_color[2:4], 16) / 255
+    b = int(hex_color[4:6], 16) / 255
+    return [r, g, b, 1]
+
+
+def _pastel(hex_color: str) -> list:
+    """Return a pastel (lighter) version of a hex color."""
+    rgba = _hex_to_rgba(hex_color)
+    return [rgba[0] * 0.3 + 0.7, rgba[1] * 0.3 + 0.7, rgba[2] * 0.3 + 0.7, 1]
+
+
+class DayCardWidget(ButtonBehavior, MDCard):
+    """A tappable day card in the calendar grid."""
 
     def __init__(self, display_date: date, entry=None, on_tap=None, **kwargs):
         super().__init__(
-            style="elevated",
-            size_hint=(None, None),
-            size=(dp(48), dp(90)),
+            orientation="vertical",
+            size_hint=(1, None),
+            height=dp(90),
             padding=[dp(4), dp(4), dp(4), dp(4)],
+            radius=[dp(8)],
+            elevation=2,
             **kwargs,
         )
         self.display_date = display_date
@@ -40,64 +55,50 @@ class DayCardWidget(MDCard):
         self._on_tap = on_tap
         self._is_today = display_date == date.today()
 
-        self.orientation = "vertical"
-        self.md_bg_color = self._card_bg_color()
+        self.md_bg_color = self._card_bg()
 
         # Day number
         self.day_label = MDLabel(
             text=str(display_date.day),
             halign="center",
-            font_style="Title",
-            role="small",
-            adaptive_height=True,
+            font_style="Subtitle1",
             bold=self._is_today,
+            adaptive_height=True,
         )
         if self._is_today:
             self.day_label.theme_text_color = "Custom"
-            self.day_label.text_color = get_color_from_hex("#2196F3")
+            self.day_label.text_color = _hex_to_rgba("#2196F3")
         self.add_widget(self.day_label)
 
-        # Severity indicator
+        # Severity
         self.severity_label = MDLabel(
-            text="",
-            halign="center",
-            adaptive_height=True,
+            text="", halign="center", adaptive_height=True, bold=True,
         )
         self.add_widget(self.severity_label)
 
-        # Food emoji preview
+        # Food emojis
         self.food_label = MDLabel(
-            text="",
-            halign="center",
-            adaptive_height=True,
-            font_style="Body",
-            role="small",
+            text="", halign="center", font_style="Caption", adaptive_height=True,
         )
         self.add_widget(self.food_label)
 
         self._update_content()
 
-        self.bind(on_release=self._handle_tap)
-
-    def _handle_tap(self, *_):
+    def on_release(self):
         if self._on_tap:
             self._on_tap(self.display_date, self.entry)
 
-    def _card_bg_color(self):
+    def _card_bg(self):
         if self.entry and self.entry.severity:
-            hex_color = SEVERITY_COLORS.get(self.entry.severity, "#E0E0E0")
-            rgba = get_color_from_hex(hex_color)
-            # Make it lighter (pastel) for card background
-            return [rgba[0] * 0.3 + 0.7, rgba[1] * 0.3 + 0.7, rgba[2] * 0.3 + 0.7, 1]
-        return get_color_from_hex("#F5F5F5")
+            return _pastel(SEVERITY_COLORS.get(self.entry.severity, "#E0E0E0"))
+        return _hex_to_rgba("#F5F5F5")
 
     def _update_content(self):
         if self.entry and self.entry.severity:
             self.severity_label.text = str(self.entry.severity)
             color = SEVERITY_COLORS.get(self.entry.severity, "#9E9E9E")
             self.severity_label.theme_text_color = "Custom"
-            self.severity_label.text_color = get_color_from_hex(color)
-            self.severity_label.bold = True
+            self.severity_label.text_color = _hex_to_rgba(color)
 
             if self.entry.foods:
                 emojis = [FOOD_EMOJIS.get(f, "") for f in self.entry.foods[:3]]
@@ -109,7 +110,7 @@ class DayCardWidget(MDCard):
 
     def set_entry(self, entry):
         self.entry = entry
-        self.md_bg_color = self._card_bg_color()
+        self.md_bg_color = self._card_bg()
         self._update_content()
 
 
@@ -124,8 +125,8 @@ class CalendarScreen(MDScreen):
 
     def _calculate_start_date(self) -> date:
         today = date.today()
-        days_since_week_start = (today.weekday() - FIRST_DAY_OF_WEEK) % 7
-        week_start = today - timedelta(days=days_since_week_start)
+        days_since = (today.weekday() - FIRST_DAY_OF_WEEK) % 7
+        week_start = today - timedelta(days=days_since)
         return week_start - timedelta(weeks=WEEKS_TO_DISPLAY - 1)
 
     def _build_ui(self, *_):
@@ -140,25 +141,13 @@ class CalendarScreen(MDScreen):
             adaptive_height=True,
             padding=[dp(8), dp(8), dp(8), dp(0)],
         )
-        prev_btn = MDIconButton(
-            icon="chevron-left",
-            on_release=lambda *_: self._go_previous(),
-        )
+        prev_btn = MDIconButton(icon="chevron-left", on_release=lambda *_: self._go_previous())
         self.title_label = MDLabel(
-            text="",
-            halign="center",
-            font_style="Title",
-            role="medium",
-            adaptive_height=True,
+            text="", halign="center", font_style="H6", adaptive_height=True,
         )
-        today_btn = MDIconButton(
-            icon="calendar-today",
-            on_release=lambda *_: self._go_today(),
-        )
-        next_btn = MDIconButton(
-            icon="chevron-right",
-            on_release=lambda *_: self._go_next(),
-        )
+        today_btn = MDIconButton(icon="calendar-today", on_release=lambda *_: self._go_today())
+        next_btn = MDIconButton(icon="chevron-right", on_release=lambda *_: self._go_next())
+
         header.add_widget(prev_btn)
         header.add_widget(self.title_label)
         header.add_widget(today_btn)
@@ -175,18 +164,14 @@ class CalendarScreen(MDScreen):
         day_names = day_names[FIRST_DAY_OF_WEEK:] + day_names[:FIRST_DAY_OF_WEEK]
         for name in day_names:
             lbl = MDLabel(
-                text=name,
-                halign="center",
-                theme_text_color="Secondary",
-                adaptive_height=True,
-                bold=True,
-                size_hint_x=1,
+                text=name, halign="center", theme_text_color="Secondary",
+                bold=True, adaptive_height=True, size_hint_x=1,
             )
             day_names_row.add_widget(lbl)
         root.add_widget(day_names_row)
 
-        # Calendar grid container
-        scroll = MDScrollView()
+        # Calendar grid
+        scroll = ScrollView()
         self.grid_container = MDBoxLayout(
             orientation="vertical",
             adaptive_height=True,
@@ -207,16 +192,12 @@ class CalendarScreen(MDScreen):
         current_date = self.current_start_date
         for week in range(WEEKS_TO_DISPLAY):
             week_row = MDBoxLayout(
-                orientation="horizontal",
-                adaptive_height=True,
-                spacing=dp(4),
+                orientation="horizontal", adaptive_height=True, spacing=dp(4),
             )
             for day in range(7):
                 entry = self.data_manager.get_entry(current_date)
                 card = DayCardWidget(
-                    current_date,
-                    entry=entry,
-                    on_tap=self._on_card_tap,
+                    current_date, entry=entry, on_tap=self._on_card_tap,
                 )
                 self.day_cards[current_date] = card
                 week_row.add_widget(card)
@@ -231,44 +212,27 @@ class CalendarScreen(MDScreen):
         ]
         if self.current_start_date.month == end_date.month:
             title = (
-                f"{self.current_start_date.day}. - {end_date.day}. "
+                f"{self.current_start_date.day}.-{end_date.day}. "
                 f"{month_names[end_date.month - 1]} {end_date.year}"
             )
         else:
             title = (
-                f"{self.current_start_date.day}. {month_names[self.current_start_date.month - 1]} - "
+                f"{self.current_start_date.day}. {month_names[self.current_start_date.month - 1]} – "
                 f"{end_date.day}. {month_names[end_date.month - 1]} {end_date.year}"
             )
         self.title_label.text = title
 
     def _on_card_tap(self, tapped_date: date, entry):
+        """Navigate to entry screen for editing (or detail if entry exists)."""
         from kivymd.app import MDApp
         app = MDApp.get_running_app()
+        # Switch to the entry tab and load that date
+        bottom_nav = app.root.ids.bottom_nav
+        entry_screen = app.root.ids.entry_screen
 
-        if entry:
-            # Navigate to day detail screen
-            from mobile_ui.day_detail_screen import DayDetailScreen
-            sm = app.root.ids.screen_manager
-
-            # Remove previous detail screen if exists
-            existing = sm.get_screen("day_detail") if sm.has_screen("day_detail") else None
-            if existing:
-                sm.remove_widget(existing)
-
-            detail = DayDetailScreen(
-                display_date=tapped_date,
-                entry=entry,
-                name="day_detail",
-            )
-            sm.add_widget(detail)
-            sm.current = "day_detail"
-        else:
-            # Navigate to entry screen for this date
-            sm = app.root.ids.screen_manager
-            entry_screen = sm.get_screen("entry")
-            entry_screen.current_date = tapped_date
-            entry_screen._load_date(tapped_date)
-            sm.current = "entry"
+        entry_screen.current_date = tapped_date
+        entry_screen._load_date(tapped_date)
+        bottom_nav.switch_tab("entry")
 
     # ── Navigation ──────────────────────────────────────────────────────────────
 

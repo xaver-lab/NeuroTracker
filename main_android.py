@@ -1,5 +1,5 @@
 """
-NeuroTracker Android – KivyMD Entry Point
+NeuroTracker Android – KivyMD 1.2.0 Entry Point
 Shares models/ and utils/ with the PyQt5 desktop version.
 """
 
@@ -13,9 +13,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 from kivy.core.window import Window
 from kivy.utils import platform
 from kivy.lang import Builder
-from kivy.metrics import dp
-
-from kivymd.app import MDApp
 
 import config
 from models.data_manager import DataManager
@@ -39,90 +36,82 @@ else:
     # Desktop preview – simulate mobile dimensions
     Window.size = (400, 720)
 
+# ---------- Import screens before KV so classes are registered ----------
+from mobile_ui.entry_screen import EntryScreen  # noqa: F401
+from mobile_ui.calendar_screen import CalendarScreen  # noqa: F401
+from mobile_ui.stats_screen import StatsScreen  # noqa: F401
+
 # ---------- KV layout ----------
 KV = """
-#:import NoTransition kivy.uix.screenmanager.NoTransition
+MDBoxLayout:
+    orientation: "vertical"
 
-MDScreen:
-    md_bg_color: app.theme_cls.backgroundColor
+    MDBottomNavigation:
+        id: bottom_nav
+        panel_color: app.theme_cls.bg_dark
+        selected_color_background: app.theme_cls.primary_light
+        text_color_active: app.theme_cls.primary_color
 
-    MDBoxLayout:
-        orientation: "vertical"
-
-        MDScreenManager:
-            id: screen_manager
-            transition: NoTransition()
+        MDBottomNavigationItem:
+            name: "entry"
+            text: "Heute"
+            icon: "pencil"
+            on_tab_press: app.on_tab_switch("entry")
 
             EntryScreen:
-                name: "entry"
+                id: entry_screen
+
+        MDBottomNavigationItem:
+            name: "calendar"
+            text: "Kalender"
+            icon: "calendar-month"
+            on_tab_press: app.on_tab_switch("calendar")
 
             CalendarScreen:
-                name: "calendar"
+                id: calendar_screen
+
+        MDBottomNavigationItem:
+            name: "stats"
+            text: "Statistiken"
+            icon: "chart-bar"
+            on_tab_press: app.on_tab_switch("stats")
 
             StatsScreen:
-                name: "stats"
-
-        MDNavigationBar:
-            on_switch_tabs: app.on_switch_tabs(*args)
-
-            MDNavigationItem:
-                MDNavigationItemIcon:
-                    icon: "pencil"
-                MDNavigationItemLabel:
-                    text: "Heute"
-
-            MDNavigationItem:
-                MDNavigationItemIcon:
-                    icon: "calendar-month"
-                MDNavigationItemLabel:
-                    text: "Kalender"
-
-            MDNavigationItem:
-                MDNavigationItemIcon:
-                    icon: "chart-bar"
-                MDNavigationItemLabel:
-                    text: "Statistiken"
+                id: stats_screen
 """
 
 
+from kivymd.app import MDApp
+
+
 class NeuroTrackerApp(MDApp):
-    """KivyMD application for NeuroTracker Android."""
+    """KivyMD 1.2.0 application for NeuroTracker Android."""
 
     def build(self):
         self.title = config.APP_NAME
 
-        # Material Design 3 theme
+        # Material Design theme (KivyMD 1.2.0)
         self.theme_cls.theme_style = "Light"
         self.theme_cls.primary_palette = "Blue"
+        self.theme_cls.accent_palette = "Amber"
+        self.theme_cls.material_style = "M3"
 
         # Shared data layer (identical to desktop)
         self.data_manager = DataManager()
         self.food_manager = FoodManager()
         self.settings_manager = SettingsManager()
 
-        # Import screens here to avoid circular imports
-        from mobile_ui.entry_screen import EntryScreen  # noqa: F401
-        from mobile_ui.calendar_screen import CalendarScreen  # noqa: F401
-        from mobile_ui.stats_screen import StatsScreen  # noqa: F401
-
         return Builder.load_string(KV)
 
-    # ---------- Navigation ----------
-
-    _tab_map = {
-        "Heute": "entry",
-        "Kalender": "calendar",
-        "Statistiken": "stats",
-    }
-
-    def on_switch_tabs(self, bar, item, item_icon, item_text):
-        screen_name = self._tab_map.get(item_text.text, "entry")
-        self.root.ids.screen_manager.current = screen_name
-
-        # Refresh screen data when entering
-        screen = self.root.ids.screen_manager.get_screen(screen_name)
-        if hasattr(screen, "on_enter_screen"):
-            screen.on_enter_screen()
+    def on_tab_switch(self, tab_name: str):
+        """Refresh screen data when tab is selected."""
+        root = self.root
+        if tab_name == "entry" and hasattr(root.ids, "entry_screen"):
+            root.ids.entry_screen.on_enter_screen()
+        elif tab_name == "calendar" and hasattr(root.ids, "calendar_screen"):
+            root.ids.calendar_screen.on_enter_screen()
+        elif tab_name == "stats" and hasattr(root.ids, "stats_screen"):
+            root.ids.stats_screen.on_enter_screen()
 
 
 if __name__ == "__main__":
