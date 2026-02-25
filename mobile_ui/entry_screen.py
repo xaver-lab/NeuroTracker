@@ -222,7 +222,7 @@ class EntryScreen(MDScreen):
 
             chip = MDChip(
                 text=label,
-                check=True,
+                type="filter",
                 active=False,
                 on_active=lambda inst, val, f=food: self._toggle_food(f, val),
             )
@@ -273,7 +273,7 @@ class EntryScreen(MDScreen):
             )
             self.fungal_chip = MDChip(
                 text="Zehenpilz aktuell aktiv",
-                check=True,
+                type="filter",
                 active=False,
                 on_active=lambda inst, val: setattr(self, "fungal_active", val),
             )
@@ -322,7 +322,7 @@ class EntryScreen(MDScreen):
                     weather_flow.add_widget(row)
                 chip = MDChip(
                     text=opt,
-                    check=True,
+                    type="filter",
                     active=False,
                     on_active=lambda inst, val, w=opt: self._toggle_weather(w, val),
                 )
@@ -338,7 +338,7 @@ class EntryScreen(MDScreen):
             )
             self.sweating_chip = MDChip(
                 text="Starkes Schwitzen heute",
-                check=True,
+                type="filter",
                 active=False,
                 on_active=lambda inst, val: setattr(self, "sweating_active", val),
             )
@@ -358,7 +358,7 @@ class EntryScreen(MDScreen):
                     contact_flow.add_widget(row)
                 chip = MDChip(
                     text=item,
-                    check=True,
+                    type="filter",
                     active=False,
                     on_active=lambda inst, val, c=item: self._toggle_contact(c, val),
                 )

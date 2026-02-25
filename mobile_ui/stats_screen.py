@@ -92,7 +92,7 @@ class StatsScreen(MDScreen):
         for label, days in [("7 T", 7), ("14 T", 14), ("30 T", 30), ("90 T", 90), ("Alle", None)]:
             chip = MDChip(
                 text=label,
-                check=True,
+                type="filter",
                 active=(days == 30),
                 on_active=lambda inst, val, d=days: self._on_range_selected(d, val),
             )

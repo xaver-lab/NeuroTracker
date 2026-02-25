@@ -9,7 +9,6 @@ from typing import Optional, Dict
 from kivy.metrics import dp
 from kivy.clock import Clock
 from kivy.uix.scrollview import ScrollView
-from kivy.uix.behaviors import ButtonBehavior
 
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.boxlayout import MDBoxLayout
@@ -37,7 +36,7 @@ def _pastel(hex_color: str) -> list:
     return [rgba[0] * 0.3 + 0.7, rgba[1] * 0.3 + 0.7, rgba[2] * 0.3 + 0.7, 1]
 
 
-class DayCardWidget(ButtonBehavior, MDCard):
+class DayCardWidget(MDCard):
     """A tappable day card in the calendar grid."""
 
     def __init__(self, display_date: date, entry=None, on_tap=None, **kwargs):
