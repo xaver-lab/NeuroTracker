@@ -9,7 +9,8 @@ from typing import Optional
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QMenuBar, QMenu, QAction, QStatusBar, QMessageBox,
-    QFileDialog, QLabel, QFrame, QSplitter
+    QFileDialog, QLabel, QFrame, QSplitter,
+    QDialog, QCheckBox, QPushButton, QDialogButtonBox,
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QIcon
@@ -21,6 +22,7 @@ from config import (
 )
 from models.data_manager import DataManager
 from models.food_manager import FoodManager
+from models.settings_manager import SettingsManager
 from ui.styles import get_main_stylesheet
 from ui.calendar_widget import CalendarWidget
 from ui.entry_panel import EntryPanel
@@ -41,6 +43,7 @@ class MainWindow(QMainWindow):
         # Initialize managers
         self.data_manager = DataManager()
         self.food_manager = FoodManager()
+        self.settings_manager = SettingsManager()
         self.drive_sync = GoogleDriveSync(self.data_manager)
         self.export_manager = ExportManager(self.data_manager)
 
@@ -159,6 +162,13 @@ class MainWindow(QMainWindow):
         connect_drive_action.triggered.connect(self.connect_google_drive)
         sync_menu.addAction(connect_drive_action)
 
+        # Settings menu
+        settings_menu = menubar.addMenu("Einstellungen")
+
+        modules_action = QAction("Tracker-Module aktivieren...", self)
+        modules_action.triggered.connect(self.show_module_settings)
+        settings_menu.addAction(modules_action)
+
         # Help menu
         help_menu = menubar.addMenu("Hilfe")
 
@@ -181,7 +191,7 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         # Entry panel (left side)
-        self.entry_panel = EntryPanel(self.data_manager, self.food_manager)
+        self.entry_panel = EntryPanel(self.data_manager, self.food_manager, self.settings_manager)
         self.entry_panel.entry_saved.connect(self.on_entry_saved)
         self.entry_panel.entry_deleted.connect(self.on_entry_deleted)
 
@@ -463,6 +473,51 @@ class MainWindow(QMainWindow):
             "<li>Strg+P: PDF exportieren</li>"
             "</ul>"
         )
+
+    def show_module_settings(self):
+        """Open dialog for enabling/disabling tracker modules."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Tracker-Module")
+        dialog.setMinimumWidth(380)
+        dialog.setStyleSheet("QDialog { background-color: #FAFAFA; }")
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(24, 24, 24, 16)
+        layout.setSpacing(16)
+
+        title = QLabel("Welche Trigger möchtest du erfassen?")
+        title.setStyleSheet("font-size: 14px; font-weight: bold; color: #212121;")
+        title.setWordWrap(True)
+        layout.addWidget(title)
+
+        hint = QLabel(
+            "Aktivierte Module erscheinen im Eingabe-Panel (links). "
+            "Du kannst sie jederzeit ein- oder ausschalten."
+        )
+        hint.setStyleSheet("color: #757575; font-size: 12px;")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        from config import TRACKER_MODULES
+        checkboxes = {}
+        for key, info in TRACKER_MODULES.items():
+            cb = QCheckBox(f"{info['icon']}  {info['label']}")
+            cb.setChecked(self.settings_manager.is_module_enabled(key))
+            cb.setStyleSheet("QCheckBox { font-size: 13px; padding: 4px 0; }")
+            layout.addWidget(cb)
+            checkboxes[key] = cb
+
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(dialog.accept)
+        btns.rejected.connect(dialog.reject)
+        layout.addWidget(btns)
+
+        if dialog.exec_() == QDialog.Accepted:
+            for key, cb in checkboxes.items():
+                self.settings_manager.set_module_enabled(key, cb.isChecked())
+            # Rebuild entry panel trigger sections
+            self.entry_panel.rebuild_trigger_sections()
+            self.statusBar.showMessage("Einstellungen gespeichert", 2000)
 
     def closeEvent(self, event):
         """Handle window close"""

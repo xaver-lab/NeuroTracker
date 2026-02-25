@@ -1,64 +1,70 @@
 """
 Entry Panel Widget for Neuro-Tracker Application
-Left sidebar for entering/editing day data
+Left sidebar for entering/editing day data.
+Modular trigger sections are shown/hidden based on SettingsManager.
 """
 
-from datetime import date, datetime
+from datetime import date
 from typing import List, Optional
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSlider, QLineEdit, QTextEdit, QFrame, QScrollArea,
-    QCompleter, QMessageBox, QSizePolicy, QGridLayout, QCheckBox
+    QTextEdit, QFrame, QScrollArea, QMessageBox, QSizePolicy,
+    QGridLayout, QCheckBox, QComboBox
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QStringListModel, QTimer
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
 import json
 
 from config import (
     SEVERITY_COLORS, MIN_SEVERITY, MAX_SEVERITY,
     COLOR_PRIMARY, COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY,
-    COLOR_DANGER, COLOR_SUCCESS, ENTRY_PANEL_WIDTH, FOOD_SUGGESTIONS_FILE
+    COLOR_DANGER, COLOR_SUCCESS, ENTRY_PANEL_WIDTH, FOOD_SUGGESTIONS_FILE,
+    STRESS_COLORS, SLEEP_COLORS, WEATHER_OPTIONS, CONTACT_SUGGESTIONS,
+    NICKEL_RICH_FOODS,
 )
 from models.day_entry import DayEntry
 from models.data_manager import DataManager
 from models.food_manager import FoodManager
-
-
+from models.settings_manager import SettingsManager
 
 
 class EntryPanel(QWidget):
     """
     Panel for entering and editing day entries.
-    Shows severity slider, food input, and notes.
+    Trigger sections (stress, fungal, sleep, weather, sweating, contact)
+    are shown/hidden based on which modules are enabled in SettingsManager.
     """
 
-    entry_saved = pyqtSignal(date)  # Emitted when entry is saved
-    entry_deleted = pyqtSignal(date)  # Emitted when entry is deleted
+    entry_saved = pyqtSignal(date)
+    entry_deleted = pyqtSignal(date)
 
-    def __init__(self, data_manager: DataManager, food_manager: FoodManager, parent=None):
+    def __init__(
+        self,
+        data_manager: DataManager,
+        food_manager: FoodManager,
+        settings_manager: Optional[SettingsManager] = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self.data_manager = data_manager
         self.food_manager = food_manager
+        self.settings_manager = settings_manager or SettingsManager()
         self.current_date: Optional[date] = None
         self.current_entry: Optional[DayEntry] = None
 
         self.setFixedWidth(ENTRY_PANEL_WIDTH)
         self.setup_ui()
 
+    # ── Setup ──────────────────────────────────────────────────────────────────
+
     def setup_ui(self):
-        """Initialize the UI components"""
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: white;
-            }}
-        """)
+        self.setStyleSheet("QWidget { background-color: white; }")
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Scroll area for content
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -69,7 +75,7 @@ class EntryPanel(QWidget):
         self.content_layout.setContentsMargins(20, 20, 20, 20)
         self.content_layout.setSpacing(20)
 
-        # Date header
+        # ── Date header ────────────────────────────────────────────────────────
         self.date_label = QLabel("Datum auswählen")
         self.date_label.setFont(QFont("Segoe UI", 20, QFont.Bold))
         self.date_label.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY};")
@@ -79,184 +85,392 @@ class EntryPanel(QWidget):
         self.weekday_label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 14px;")
         self.content_layout.addWidget(self.weekday_label)
 
-        # Separator
-        self.content_layout.addWidget(self._create_separator())
+        self.content_layout.addWidget(self._sep())
 
-        # Severity section
-        severity_section = QWidget()
-        severity_layout = QVBoxLayout(severity_section)
-        severity_layout.setContentsMargins(0, 0, 0, 0)
-        severity_layout.setSpacing(12)
+        # ── Severity ───────────────────────────────────────────────────────────
+        self.content_layout.addWidget(self._build_severity_section())
+        self.content_layout.addWidget(self._sep())
 
-        severity_header = QLabel("Hautzustand")
-        severity_header.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        severity_layout.addWidget(severity_header)
+        # ── Food ───────────────────────────────────────────────────────────────
+        self.content_layout.addWidget(self._build_food_section())
+        self.content_layout.addWidget(self._sep())
 
-        # Severity buttons
-        severity_buttons_layout = QHBoxLayout()
-        severity_buttons_layout.setSpacing(8)
+        # ── Modular trigger sections (placeholders, built below) ───────────────
+        self._trigger_widgets: dict = {}
+        self._build_trigger_sections()
 
-        self.severity_buttons = []
-        severity_labels = ["1", "2", "3", "4", "5"]
-
-        for i, label in enumerate(severity_labels, start=1):
-            btn = QPushButton(label)
-            btn.setFixedSize(48, 48)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setProperty("severity", i)
-            btn.clicked.connect(lambda checked, s=i: self.set_severity(s))
-            self.severity_buttons.append(btn)
-            severity_buttons_layout.addWidget(btn)
-
-        severity_buttons_layout.addStretch()
-        severity_layout.addLayout(severity_buttons_layout)
-
-        # Severity description
-        self.severity_description = QLabel("Wähle den Hautzustand (1=sehr gut, 5=sehr schlecht)")
-        self.severity_description.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 12px;")
-        self.severity_description.setWordWrap(True)
-        severity_layout.addWidget(self.severity_description)
-
-        # Skin Notes directly under severity
-        skin_notes_header = QLabel("Notizen Hautzustand")
-        skin_notes_header.setFont(QFont("Segoe UI", 12))
-        skin_notes_header.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; margin-top: 8px;")
-        severity_layout.addWidget(skin_notes_header)
-
-        self.skin_notes_input = QTextEdit()
-        self.skin_notes_input.setPlaceholderText("z.B. Rötungen, Juckreiz, Stellen...")
-        self.skin_notes_input.setMaximumHeight(60)
-        self.skin_notes_input.setStyleSheet(f"""
-            QTextEdit {{
-                border: 1px solid #E0E0E0;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 13px;
-            }}
-            QTextEdit:focus {{
-                border: 2px solid {COLOR_PRIMARY};
-            }}
-        """)
-        severity_layout.addWidget(self.skin_notes_input)
-
-        self.content_layout.addWidget(severity_section)
-
-        # Separator
-        self.content_layout.addWidget(self._create_separator())
-
-        # Food section with checkboxes
-        food_section = QWidget()
-        food_layout = QVBoxLayout(food_section)
-        food_layout.setContentsMargins(0, 0, 0, 0)
-        food_layout.setSpacing(8)
-
-        food_header = QLabel("Lebensmittel")
-        food_header.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        food_layout.addWidget(food_header)
-
-        # Load fixed food suggestions
-        self.fixed_foods = self._load_food_suggestions()
-        self.food_checkboxes = {}
-
-        # Create checkbox grid
-        checkbox_container = QWidget()
-        checkbox_grid = QGridLayout(checkbox_container)
-        checkbox_grid.setContentsMargins(0, 0, 0, 0)
-        checkbox_grid.setSpacing(4)
-
-        for i, food in enumerate(self.fixed_foods):
-            checkbox = QCheckBox(food)
-            checkbox.setStyleSheet(f"""
-                QCheckBox {{
-                    font-size: 12px;
-                    padding: 4px;
-                }}
-                QCheckBox::indicator {{
-                    width: 16px;
-                    height: 16px;
-                }}
-                QCheckBox::indicator:checked {{
-                    background-color: {COLOR_PRIMARY};
-                    border: 1px solid {COLOR_PRIMARY};
-                    border-radius: 3px;
-                }}
-                QCheckBox::indicator:unchecked {{
-                    background-color: white;
-                    border: 1px solid #BDBDBD;
-                    border-radius: 3px;
-                }}
-            """)
-            row = i // 2
-            col = i % 2
-            checkbox_grid.addWidget(checkbox, row, col)
-            self.food_checkboxes[food] = checkbox
-
-        food_layout.addWidget(checkbox_container)
-
-        # Food Notes directly under food checkboxes
-        food_notes_header = QLabel("Notizen Nahrung")
-        food_notes_header.setFont(QFont("Segoe UI", 12))
-        food_notes_header.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; margin-top: 8px;")
-        food_layout.addWidget(food_notes_header)
-
-        self.food_notes_input = QTextEdit()
-        self.food_notes_input.setPlaceholderText("z.B. Menge, Zubereitung...")
-        self.food_notes_input.setMaximumHeight(60)
-        self.food_notes_input.setStyleSheet(f"""
-            QTextEdit {{
-                border: 1px solid #E0E0E0;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 13px;
-            }}
-            QTextEdit:focus {{
-                border: 2px solid {COLOR_PRIMARY};
-            }}
-        """)
-        food_layout.addWidget(self.food_notes_input)
-
-        self.content_layout.addWidget(food_section)
-
-        # Keep legacy notes_input as hidden for backward compatibility
-        self.notes_input = QTextEdit()
-        self.notes_input.setVisible(False)
-
-        # Stretch to push buttons to bottom
         self.content_layout.addStretch()
 
         scroll_area.setWidget(content_widget)
         main_layout.addWidget(scroll_area)
 
-        # Action buttons at bottom (smaller)
-        button_container = QWidget()
-        button_container.setStyleSheet("""
+        # ── Bottom action bar ──────────────────────────────────────────────────
+        main_layout.addWidget(self._build_action_bar())
+
+        self.current_severity = None
+        self.update_severity_buttons()
+
+    # ── Section builders ───────────────────────────────────────────────────────
+
+    def _sep(self) -> QFrame:
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet("background-color: #E0E0E0;")
+        sep.setFixedHeight(1)
+        return sep
+
+    def _build_severity_section(self) -> QWidget:
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        header = QLabel("Hautzustand")
+        header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        layout.addWidget(header)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        self.severity_buttons = []
+        for i in range(1, 6):
+            btn = QPushButton(str(i))
+            btn.setFixedSize(48, 48)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setProperty("severity", i)
+            btn.clicked.connect(lambda _, s=i: self.set_severity(s))
+            self.severity_buttons.append(btn)
+            btn_row.addWidget(btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        self.severity_description = QLabel(
+            "Wähle den Hautzustand (1=sehr gut, 5=sehr schlecht)"
+        )
+        self.severity_description.setStyleSheet(
+            f"color: {COLOR_TEXT_SECONDARY}; font-size: 12px;"
+        )
+        self.severity_description.setWordWrap(True)
+        layout.addWidget(self.severity_description)
+
+        skin_lbl = QLabel("Notizen Hautzustand")
+        skin_lbl.setFont(QFont("Segoe UI", 12))
+        skin_lbl.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; margin-top: 8px;")
+        layout.addWidget(skin_lbl)
+
+        self.skin_notes_input = QTextEdit()
+        self.skin_notes_input.setPlaceholderText("z.B. Rötungen, Juckreiz, Stellen...")
+        self.skin_notes_input.setMaximumHeight(60)
+        self.skin_notes_input.setStyleSheet(self._input_style())
+        layout.addWidget(self.skin_notes_input)
+
+        return section
+
+    def _build_food_section(self) -> QWidget:
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        header = QLabel("Lebensmittel")
+        header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        layout.addWidget(header)
+
+        self.fixed_foods = self._load_food_suggestions()
+        self.food_checkboxes: dict = {}
+
+        grid_widget = QWidget()
+        grid = QGridLayout(grid_widget)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(4)
+
+        for idx, food in enumerate(self.fixed_foods):
+            is_nickel = food in NICKEL_RICH_FOODS
+            cb = QCheckBox(food + (" [Ni]" if is_nickel else ""))
+            if is_nickel:
+                cb.setStyleSheet(self._nickel_checkbox_style())
+                cb.setToolTip("Nickelreich — kann Dyshidrosis-Schübe begünstigen")
+            else:
+                cb.setStyleSheet(self._checkbox_style())
+            grid.addWidget(cb, idx // 2, idx % 2)
+            self.food_checkboxes[food] = cb
+
+        layout.addWidget(grid_widget)
+
+        food_lbl = QLabel("Notizen Nahrung")
+        food_lbl.setFont(QFont("Segoe UI", 12))
+        food_lbl.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; margin-top: 8px;")
+        layout.addWidget(food_lbl)
+
+        self.food_notes_input = QTextEdit()
+        self.food_notes_input.setPlaceholderText("z.B. Menge, Zubereitung...")
+        self.food_notes_input.setMaximumHeight(60)
+        self.food_notes_input.setStyleSheet(self._input_style())
+        layout.addWidget(self.food_notes_input)
+
+        # Legacy hidden field
+        self.notes_input = QTextEdit()
+        self.notes_input.setVisible(False)
+
+        return section
+
+    def _build_trigger_sections(self):
+        """
+        Build all modular trigger sections and add them to content_layout.
+        Existing trigger widgets are removed first (for rebuilding on settings change).
+        """
+        sm = self.settings_manager
+
+        # Remove previously added trigger widgets
+        for key, (widget, sep) in self._trigger_widgets.items():
+            widget.setParent(None)
+            sep.setParent(None)
+        self._trigger_widgets.clear()
+
+        # Remove trailing stretch if present (we'll add it back at the end)
+        last = self.content_layout.itemAt(self.content_layout.count() - 1)
+        if last and last.spacerItem():
+            self.content_layout.removeItem(last)
+
+        modules = [
+            ("stress",   self._build_stress_section),
+            ("fungal",   self._build_fungal_section),
+            ("sleep",    self._build_sleep_section),
+            ("weather",  self._build_weather_section),
+            ("sweating", self._build_sweating_section),
+            ("contact",  self._build_contact_section),
+        ]
+
+        for key, builder in modules:
+            if sm.is_module_enabled(key):
+                widget = builder()
+                sep = self._sep()
+                self.content_layout.addWidget(widget)
+                self.content_layout.addWidget(sep)
+                self._trigger_widgets[key] = (widget, sep)
+
+        self.content_layout.addStretch()
+
+    # ── Stress section ─────────────────────────────────────────────────────────
+
+    def _build_stress_section(self) -> QWidget:
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        header = QLabel("😰 Stresslevel")
+        header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        layout.addWidget(header)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        self.stress_buttons = []
+        stress_labels = ["1\nEntspannt", "2\nLeicht", "3\nMittel", "4\nHoch", "5\nExtrem"]
+        for i, lbl in enumerate(stress_labels, start=1):
+            btn = QPushButton(str(i))
+            btn.setFixedSize(48, 48)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setProperty("stress_val", i)
+            btn.setToolTip(lbl.replace("\n", ": "))
+            btn.clicked.connect(lambda _, s=i: self.set_stress(s))
+            self.stress_buttons.append(btn)
+            btn_row.addWidget(btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        self.stress_description = QLabel("1 = entspannt  —  5 = extremer Stress")
+        self.stress_description.setStyleSheet(
+            f"color: {COLOR_TEXT_SECONDARY}; font-size: 11px;"
+        )
+        layout.addWidget(self.stress_description)
+
+        self.current_stress = None
+        self.update_stress_buttons()
+        return section
+
+    # ── Fungal section ─────────────────────────────────────────────────────────
+
+    def _build_fungal_section(self) -> QWidget:
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        header = QLabel("🍄 Zehenpilz (Mykose)")
+        header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        layout.addWidget(header)
+
+        self.fungal_checkbox = QCheckBox("Zehenpilz aktuell aktiv")
+        self.fungal_checkbox.setStyleSheet(f"""
+            QCheckBox {{
+                font-size: 13px;
+                padding: 6px;
+                border: 1px solid #E0E0E0;
+                border-radius: 6px;
+            }}
+            QCheckBox:checked {{
+                background-color: #FFF3E0;
+                border: 2px solid #FF9800;
+                font-weight: bold;
+            }}
+            QCheckBox::indicator {{
+                width: 18px; height: 18px;
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: #FF9800;
+                border: 1px solid #FF9800;
+                border-radius: 3px;
+            }}
+            QCheckBox::indicator:unchecked {{
+                background-color: white;
+                border: 1px solid #BDBDBD;
+                border-radius: 3px;
+            }}
+        """)
+        self.fungal_checkbox.setToolTip(
+            "Tinea pedis (Zehenpilz) kann eine Id-Reaktion (Dermatophytid) "
+            "an den Händen auslösen — markiere aktive Infektionen hier."
+        )
+        layout.addWidget(self.fungal_checkbox)
+
+        hint = QLabel("Wichtig: Zehenpilz kann Id-Reaktion an den Händen auslösen")
+        hint.setStyleSheet("color: #FF9800; font-size: 11px; padding: 2px 0;")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        return section
+
+    # ── Sleep section ──────────────────────────────────────────────────────────
+
+    def _build_sleep_section(self) -> QWidget:
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        header = QLabel("😴 Schlafqualität")
+        header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        layout.addWidget(header)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        self.sleep_buttons = []
+        for i in range(1, 6):
+            btn = QPushButton(str(i))
+            btn.setFixedSize(48, 48)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setProperty("sleep_val", i)
+            btn.clicked.connect(lambda _, s=i: self.set_sleep(s))
+            self.sleep_buttons.append(btn)
+            btn_row.addWidget(btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        lbl = QLabel("1 = schlecht geschlafen  —  5 = ausgezeichnet")
+        lbl.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 11px;")
+        layout.addWidget(lbl)
+
+        self.current_sleep = None
+        self.update_sleep_buttons()
+        return section
+
+    # ── Weather section ────────────────────────────────────────────────────────
+
+    def _build_weather_section(self) -> QWidget:
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        header = QLabel("🌤 Wetter / Umgebung")
+        header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        layout.addWidget(header)
+
+        self.weather_combo = QComboBox()
+        self.weather_combo.addItem("— nicht erfasst —")
+        for opt in WEATHER_OPTIONS:
+            self.weather_combo.addItem(opt)
+        self.weather_combo.setStyleSheet(f"""
+            QComboBox {{
+                padding: 6px 10px;
+                border: 1px solid #E0E0E0;
+                border-radius: 4px;
+                font-size: 12px;
+            }}
+            QComboBox:focus {{ border: 2px solid {COLOR_PRIMARY}; }}
+        """)
+        layout.addWidget(self.weather_combo)
+
+        return section
+
+    # ── Sweating section ───────────────────────────────────────────────────────
+
+    def _build_sweating_section(self) -> QWidget:
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        header = QLabel("💧 Schwitzen")
+        header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        layout.addWidget(header)
+
+        self.sweating_checkbox = QCheckBox("Starkes / übermäßiges Schwitzen heute")
+        self.sweating_checkbox.setStyleSheet(self._checkbox_style())
+        layout.addWidget(self.sweating_checkbox)
+
+        return section
+
+    # ── Contact section ────────────────────────────────────────────────────────
+
+    def _build_contact_section(self) -> QWidget:
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        header = QLabel("🧤 Kontaktexposition")
+        header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        layout.addWidget(header)
+
+        self.contact_checkboxes: dict = {}
+        grid_widget = QWidget()
+        grid = QGridLayout(grid_widget)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(4)
+        for idx, item in enumerate(CONTACT_SUGGESTIONS):
+            cb = QCheckBox(item)
+            cb.setStyleSheet(self._checkbox_style())
+            grid.addWidget(cb, idx // 2, idx % 2)
+            self.contact_checkboxes[item] = cb
+        layout.addWidget(grid_widget)
+
+        return section
+
+    # ── Action bar ─────────────────────────────────────────────────────────────
+
+    def _build_action_bar(self) -> QWidget:
+        container = QWidget()
+        container.setStyleSheet("""
             QWidget {
                 background-color: white;
                 border-top: 1px solid #E0E0E0;
             }
         """)
-        button_layout = QHBoxLayout(button_container)
-        button_layout.setContentsMargins(20, 10, 20, 10)
-        button_layout.setSpacing(8)
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(20, 10, 20, 10)
+        layout.setSpacing(8)
 
         self.save_button = QPushButton("Speichern")
         self.save_button.setCursor(Qt.PointingHandCursor)
         self.save_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {COLOR_SUCCESS};
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-size: 12px;
-                font-weight: bold;
+                color: white; border: none; border-radius: 4px;
+                padding: 8px 16px; font-size: 12px; font-weight: bold;
             }}
-            QPushButton:hover {{
-                background-color: #388E3C;
-            }}
-            QPushButton:disabled {{
-                background-color: #BDBDBD;
-            }}
+            QPushButton:hover {{ background-color: #388E3C; }}
+            QPushButton:disabled {{ background-color: #BDBDBD; }}
         """)
         self.save_button.clicked.connect(self.save_entry)
 
@@ -264,148 +478,241 @@ class EntryPanel(QWidget):
         self.delete_button.setCursor(Qt.PointingHandCursor)
         self.delete_button.setStyleSheet(f"""
             QPushButton {{
-                background-color: white;
-                color: {COLOR_DANGER};
-                border: 1px solid {COLOR_DANGER};
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-size: 12px;
+                background-color: white; color: {COLOR_DANGER};
+                border: 1px solid {COLOR_DANGER}; border-radius: 4px;
+                padding: 8px 16px; font-size: 12px;
             }}
-            QPushButton:hover {{
-                background-color: #FFEBEE;
-            }}
+            QPushButton:hover {{ background-color: #FFEBEE; }}
         """)
         self.delete_button.clicked.connect(self.delete_entry)
         self.delete_button.setVisible(False)
 
-        button_layout.addWidget(self.save_button)
-        button_layout.addWidget(self.delete_button)
-        button_layout.addStretch()
-
-        # Status message label (for save confirmation)
         self.status_label = QLabel("")
         self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet(f"""
-            color: {COLOR_SUCCESS};
-            font-size: 13px;
-            font-weight: bold;
-            padding: 5px;
-        """)
+        self.status_label.setStyleSheet(
+            f"color: {COLOR_SUCCESS}; font-size: 13px; font-weight: bold; padding: 5px;"
+        )
         self.status_label.setVisible(False)
-        button_layout.addWidget(self.status_label)
 
-        main_layout.addWidget(button_container)
+        layout.addWidget(self.save_button)
+        layout.addWidget(self.delete_button)
+        layout.addStretch()
+        layout.addWidget(self.status_label)
 
-        # Initialize severity buttons style
-        self.current_severity = None
-        self.update_severity_buttons()
+        return container
 
-    def _create_separator(self) -> QFrame:
-        """Create a horizontal separator line"""
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setStyleSheet("background-color: #E0E0E0;")
-        separator.setFixedHeight(1)
-        return separator
+    # ── Style helpers ──────────────────────────────────────────────────────────
+
+    def _input_style(self) -> str:
+        return f"""
+            QTextEdit {{
+                border: 1px solid #E0E0E0; border-radius: 4px;
+                padding: 8px; font-size: 13px;
+            }}
+            QTextEdit:focus {{ border: 2px solid {COLOR_PRIMARY}; }}
+        """
+
+    def _checkbox_style(self) -> str:
+        return f"""
+            QCheckBox {{ font-size: 12px; padding: 4px; }}
+            QCheckBox::indicator {{ width: 16px; height: 16px; }}
+            QCheckBox::indicator:checked {{
+                background-color: {COLOR_PRIMARY};
+                border: 1px solid {COLOR_PRIMARY}; border-radius: 3px;
+            }}
+            QCheckBox::indicator:unchecked {{
+                background-color: white; border: 1px solid #BDBDBD; border-radius: 3px;
+            }}
+        """
+
+    def _nickel_checkbox_style(self) -> str:
+        return f"""
+            QCheckBox {{ font-size: 12px; padding: 4px; color: #E65100; }}
+            QCheckBox::indicator {{ width: 16px; height: 16px; }}
+            QCheckBox::indicator:checked {{
+                background-color: #FF9800;
+                border: 1px solid #FF9800; border-radius: 3px;
+            }}
+            QCheckBox::indicator:unchecked {{
+                background-color: white; border: 1px solid #BDBDBD; border-radius: 3px;
+            }}
+        """
+
+    # ── Data helpers ───────────────────────────────────────────────────────────
 
     def _load_food_suggestions(self) -> list:
-        """Load fixed food suggestions from JSON file"""
         try:
-            with open(FOOD_SUGGESTIONS_FILE, 'r', encoding='utf-8') as f:
+            with open(FOOD_SUGGESTIONS_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return ["Milch", "Weizen", "Eier", "Nüsse", "Schokolade"]
 
     def get_selected_foods(self) -> list:
-        """Get list of selected food checkboxes"""
-        return [food for food, checkbox in self.food_checkboxes.items() if checkbox.isChecked()]
+        return [f for f, cb in self.food_checkboxes.items() if cb.isChecked()]
 
     def set_food_checkboxes(self, foods: list):
-        """Set the food checkboxes based on a list of foods"""
-        for food, checkbox in self.food_checkboxes.items():
-            checkbox.setChecked(food in foods)
+        for f, cb in self.food_checkboxes.items():
+            cb.setChecked(f in foods)
 
-    def set_date(self, selected_date: date):
-        """Set the date to edit"""
-        self.current_date = selected_date
-        self.current_entry = self.data_manager.get_entry(selected_date)
+    def _get_weather_value(self) -> Optional[str]:
+        if not hasattr(self, "weather_combo"):
+            return None
+        idx = self.weather_combo.currentIndex()
+        return None if idx == 0 else self.weather_combo.currentText()
 
-        # Update date display
-        weekdays = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
-        months = ["Januar", "Februar", "März", "April", "Mai", "Juni",
-                 "Juli", "August", "September", "Oktober", "November", "Dezember"]
+    def _set_weather_value(self, value: Optional[str]):
+        if not hasattr(self, "weather_combo"):
+            return
+        if not value:
+            self.weather_combo.setCurrentIndex(0)
+            return
+        for i in range(self.weather_combo.count()):
+            if self.weather_combo.itemText(i) == value:
+                self.weather_combo.setCurrentIndex(i)
+                return
 
-        self.date_label.setText(f"{selected_date.day}. {months[selected_date.month - 1]} {selected_date.year}")
-        self.weekday_label.setText(weekdays[selected_date.weekday()])
+    def _get_contact_exposures(self) -> List[str]:
+        if not hasattr(self, "contact_checkboxes"):
+            return []
+        return [item for item, cb in self.contact_checkboxes.items() if cb.isChecked()]
 
-        # Load entry data
-        if self.current_entry:
-            self.set_severity(self.current_entry.severity)
-            self.set_food_checkboxes(self.current_entry.foods)
-            self.skin_notes_input.setText(self.current_entry.skin_notes or "")
-            self.food_notes_input.setText(self.current_entry.food_notes or "")
-            self.delete_button.setVisible(True)
-        else:
-            self.current_severity = None
-            self.set_food_checkboxes([])
-            self.skin_notes_input.clear()
-            self.food_notes_input.clear()
-            self.delete_button.setVisible(False)
+    def _set_contact_exposures(self, items: List[str]):
+        if not hasattr(self, "contact_checkboxes"):
+            return
+        for item, cb in self.contact_checkboxes.items():
+            cb.setChecked(item in items)
 
-        self.update_severity_buttons()
+    # ── Severity / Stress / Sleep button updates ────────────────────────────────
 
     def set_severity(self, severity: int):
-        """Set the current severity level"""
         self.current_severity = severity
         self.update_severity_buttons()
-
-        severity_descriptions = {
-            1: "Sehr gut - Haut ist klar und gesund",
-            2: "Gut - Leichte Rötungen möglich",
-            3: "Mittel - Moderate Symptome",
-            4: "Schlecht - Deutliche Symptome",
-            5: "Sehr schlecht - Starke Symptome"
+        descs = {
+            1: "Sehr gut — Haut ist klar und gesund",
+            2: "Gut — Leichte Rötungen möglich",
+            3: "Mittel — Moderate Symptome",
+            4: "Schlecht — Deutliche Symptome",
+            5: "Sehr schlecht — Starke Symptome",
         }
-        self.severity_description.setText(severity_descriptions.get(severity, ""))
+        self.severity_description.setText(descs.get(severity, ""))
 
     def update_severity_buttons(self):
-        """Update the style of severity buttons"""
-        for btn in self.severity_buttons:
-            severity = btn.property("severity")
-            color = SEVERITY_COLORS.get(severity, "#9E9E9E")
+        self._update_button_group(
+            getattr(self, "severity_buttons", []),
+            getattr(self, "current_severity", None),
+            SEVERITY_COLORS,
+            "severity",
+        )
 
-            if severity == self.current_severity:
+    def set_stress(self, level: int):
+        self.current_stress = level
+        self.update_stress_buttons()
+
+    def update_stress_buttons(self):
+        self._update_button_group(
+            getattr(self, "stress_buttons", []),
+            getattr(self, "current_stress", None),
+            STRESS_COLORS,
+            "stress_val",
+        )
+
+    def set_sleep(self, level: int):
+        self.current_sleep = level
+        self.update_sleep_buttons()
+
+    def update_sleep_buttons(self):
+        self._update_button_group(
+            getattr(self, "sleep_buttons", []),
+            getattr(self, "current_sleep", None),
+            SLEEP_COLORS,
+            "sleep_val",
+        )
+
+    def _update_button_group(self, buttons, current_val, color_map, prop):
+        for btn in buttons:
+            val = btn.property(prop)
+            color = color_map.get(val, "#9E9E9E")
+            if val == current_val:
                 btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: {color};
-                        color: white;
-                        border: 2px solid {color};
-                        border-radius: 24px;
-                        font-weight: bold;
-                        font-size: 16px;
+                        background-color: {color}; color: white;
+                        border: 2px solid {color}; border-radius: 24px;
+                        font-weight: bold; font-size: 16px;
                     }}
                 """)
             else:
                 btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: white;
-                        color: {color};
-                        border: 2px solid {color};
-                        border-radius: 24px;
-                        font-weight: bold;
-                        font-size: 16px;
+                        background-color: white; color: {color};
+                        border: 2px solid {color}; border-radius: 24px;
+                        font-weight: bold; font-size: 16px;
                     }}
-                    QPushButton:hover {{
-                        background-color: {color}20;
-                    }}
+                    QPushButton:hover {{ background-color: {color}20; }}
                 """)
 
+    # ── Date / Entry loading ───────────────────────────────────────────────────
+
+    def set_date(self, selected_date: date):
+        self.current_date = selected_date
+        self.current_entry = self.data_manager.get_entry(selected_date)
+
+        weekdays = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+        months = ["Januar", "Februar", "März", "April", "Mai", "Juni",
+                  "Juli", "August", "September", "Oktober", "November", "Dezember"]
+
+        self.date_label.setText(
+            f"{selected_date.day}. {months[selected_date.month - 1]} {selected_date.year}"
+        )
+        self.weekday_label.setText(weekdays[selected_date.weekday()])
+
+        if self.current_entry:
+            e = self.current_entry
+            self.set_severity(e.severity)
+            self.set_food_checkboxes(e.foods)
+            self.skin_notes_input.setText(e.skin_notes or "")
+            self.food_notes_input.setText(e.food_notes or "")
+
+            # Trigger fields
+            if hasattr(self, "stress_buttons"):
+                self.current_stress = e.stress_level
+                self.update_stress_buttons()
+            if hasattr(self, "fungal_checkbox"):
+                self.fungal_checkbox.setChecked(bool(e.fungal_active))
+            if hasattr(self, "sleep_buttons"):
+                self.current_sleep = e.sleep_quality
+                self.update_sleep_buttons()
+            self._set_weather_value(e.weather)
+            if hasattr(self, "sweating_checkbox"):
+                self.sweating_checkbox.setChecked(bool(e.sweating))
+            self._set_contact_exposures(e.contact_exposures or [])
+
+            self.delete_button.setVisible(True)
+        else:
+            self.current_severity = None
+            self.current_stress = None
+            self.current_sleep = None
+            self.set_food_checkboxes([])
+            self.skin_notes_input.clear()
+            self.food_notes_input.clear()
+            if hasattr(self, "fungal_checkbox"):
+                self.fungal_checkbox.setChecked(False)
+            self._set_weather_value(None)
+            if hasattr(self, "sweating_checkbox"):
+                self.sweating_checkbox.setChecked(False)
+            self._set_contact_exposures([])
+            self.delete_button.setVisible(False)
+
+        self.update_severity_buttons()
+        if hasattr(self, "stress_buttons"):
+            self.update_stress_buttons()
+        if hasattr(self, "sleep_buttons"):
+            self.update_sleep_buttons()
+
+    # ── Save / Delete ──────────────────────────────────────────────────────────
 
     def save_entry(self):
-        """Save the current entry"""
         if not self.current_date:
             return
-
         if self.current_severity is None:
             QMessageBox.warning(self, "Fehler", "Bitte wähle einen Hautzustand aus.")
             return
@@ -414,55 +721,78 @@ class EntryPanel(QWidget):
             date=self.current_date.isoformat(),
             severity=self.current_severity,
             foods=self.get_selected_foods(),
-            skin_notes=self.skin_notes_input.toPlainText().strip() or "",
-            food_notes=self.food_notes_input.toPlainText().strip() or ""
+            skin_notes=self.skin_notes_input.toPlainText().strip(),
+            food_notes=self.food_notes_input.toPlainText().strip(),
+            # Trigger fields
+            stress_level=getattr(self, "current_stress", None),
+            fungal_active=(
+                self.fungal_checkbox.isChecked()
+                if hasattr(self, "fungal_checkbox") else None
+            ),
+            sleep_quality=getattr(self, "current_sleep", None),
+            weather=self._get_weather_value(),
+            sweating=(
+                self.sweating_checkbox.isChecked()
+                if hasattr(self, "sweating_checkbox") else None
+            ),
+            contact_exposures=self._get_contact_exposures(),
         )
 
         self.data_manager.add_or_update_entry(entry)
         self.current_entry = entry
         self.delete_button.setVisible(True)
-
         self.entry_saved.emit(self.current_date)
-
-        # Show status message instead of popup
         self.show_status_message("✓ Gespeichert")
 
     def delete_entry(self):
-        """Delete the current entry"""
         if not self.current_date or not self.current_entry:
             return
-
         self.data_manager.delete_entry(self.current_date)
         self.current_entry = None
         self.current_severity = None
+        self.current_stress = None
+        self.current_sleep = None
         self.set_food_checkboxes([])
         self.skin_notes_input.clear()
         self.food_notes_input.clear()
+        if hasattr(self, "fungal_checkbox"):
+            self.fungal_checkbox.setChecked(False)
+        self._set_weather_value(None)
+        if hasattr(self, "sweating_checkbox"):
+            self.sweating_checkbox.setChecked(False)
+        self._set_contact_exposures([])
         self.delete_button.setVisible(False)
 
         self.update_severity_buttons()
+        if hasattr(self, "stress_buttons"):
+            self.update_stress_buttons()
+        if hasattr(self, "sleep_buttons"):
+            self.update_sleep_buttons()
 
         self.entry_deleted.emit(self.current_date)
-
         self.show_status_message("✓ Gelöscht")
 
     def show_status_message(self, message: str, duration: int = 2000):
-        """Show a temporary status message at the bottom"""
         self.status_label.setText(message)
         self.status_label.setVisible(True)
         QTimer.singleShot(duration, lambda: self.status_label.setVisible(False))
 
+    def rebuild_trigger_sections(self):
+        """Call this after changing module settings to refresh visible sections."""
+        self._build_trigger_sections()
+        if self.current_date:
+            self.set_date(self.current_date)
+
     def clear(self):
-        """Clear the panel"""
         self.current_date = None
         self.current_entry = None
         self.current_severity = None
+        self.current_stress = None
+        self.current_sleep = None
         self.set_food_checkboxes([])
-
         self.date_label.setText("Datum auswählen")
         self.weekday_label.setText("")
         self.skin_notes_input.clear()
         self.food_notes_input.clear()
         self.delete_button.setVisible(False)
-
         self.update_severity_buttons()

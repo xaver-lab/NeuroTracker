@@ -1,6 +1,6 @@
 """
 Statistics Calculator for Neuro-Tracker Application
-Provides statistical analysis of symptoms and food correlations
+Complete trigger analysis: food, stress, fungal infections, sleep, weather, sweating, contact.
 """
 
 from datetime import date, timedelta
@@ -9,29 +9,37 @@ from collections import defaultdict
 
 from models.data_manager import DataManager
 from models.day_entry import DayEntry
+from config import NICKEL_RICH_FOODS
 
 
 class StatisticsCalculator:
     """
-    Calculates various statistics from the tracking data.
-    Includes severity analysis, food correlations, and trends.
+    Calculates statistics and detects trigger patterns from all tracked factors.
+    Supports: food, stress, fungal (Id-reaction), sleep, weather, sweating, contact.
     """
 
     def __init__(self, data_manager: DataManager):
         self.data_manager = data_manager
 
+    # ── Core helpers ────────────────────────────────────────────────────────────
+
+    def _get_entries_for_period(self, days: Optional[int]) -> List[DayEntry]:
+        if days is None:
+            return self.data_manager.get_all_entries()
+        end_date = date.today()
+        start_date = end_date - timedelta(days=days)
+        return self.data_manager.get_entries_in_range(start_date, end_date)
+
+    def _avg(self, values: List[float]) -> float:
+        return round(sum(values) / len(values), 2) if values else 0.0
+
+    def _entry_map(self, entries: List[DayEntry]) -> Dict[date, DayEntry]:
+        return {date.fromisoformat(e.date): e for e in entries}
+
+    # ── Primary statistics ──────────────────────────────────────────────────────
+
     def calculate_all(self, days: Optional[int] = None) -> Dict:
-        """
-        Calculate all statistics for the given time period.
-
-        Args:
-            days: Number of days to analyze. None for all data.
-
-        Returns:
-            Dictionary containing all statistics
-        """
         entries = self._get_entries_for_period(days)
-
         return {
             'total_entries': len(entries),
             'average_severity': self._calculate_average_severity(entries),
@@ -43,404 +51,651 @@ class StatisticsCalculator:
             'weekly_averages': self._calculate_weekly_averages(entries),
             'day_of_week_averages': self._calculate_day_of_week_averages(entries),
             'streak_info': self._calculate_streak_info(entries),
+            # New trigger metrics
+            'average_stress': self._avg_field(entries, 'stress_level'),
+            'fungal_days': sum(1 for e in entries if e.fungal_active),
+            'average_sleep': self._avg_field(entries, 'sleep_quality'),
+            'weather_distribution': self._weather_distribution(entries),
+            'sweating_days': sum(1 for e in entries if e.sweating),
         }
 
-    def _get_entries_for_period(self, days: Optional[int]) -> List[DayEntry]:
-        """Get entries for the specified period"""
-        if days is None:
-            return self.data_manager.get_all_entries()
-
-        end_date = date.today()
-        start_date = end_date - timedelta(days=days)
-        return self.data_manager.get_entries_in_range(start_date, end_date)
+    def _avg_field(self, entries: List[DayEntry], field: str) -> float:
+        values = [getattr(e, field) for e in entries if getattr(e, field) is not None]
+        return self._avg(values)
 
     def _calculate_average_severity(self, entries: List[DayEntry]) -> float:
-        """Calculate average severity"""
-        if not entries:
-            return 0.0
-
-        total = sum(entry.severity for entry in entries)
-        return round(total / len(entries), 2)
+        values = [e.severity for e in entries if e.severity is not None]
+        return self._avg(values)
 
     def _calculate_severity_distribution(self, entries: List[DayEntry]) -> Dict[int, int]:
-        """Calculate distribution of severity levels"""
-        distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-
-        for entry in entries:
-            if entry.severity in distribution:
-                distribution[entry.severity] += 1
-
-        return distribution
+        dist = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+        for e in entries:
+            if e.severity in dist:
+                dist[e.severity] += 1
+        return dist
 
     def _count_good_days(self, entries: List[DayEntry]) -> int:
-        """Count days with severity 1 or 2"""
-        return sum(1 for entry in entries if entry.severity <= 2)
+        return sum(1 for e in entries if e.severity is not None and e.severity <= 2)
 
     def _count_bad_days(self, entries: List[DayEntry]) -> int:
-        """Count days with severity 4 or 5"""
-        return sum(1 for entry in entries if entry.severity >= 4)
+        return sum(1 for e in entries if e.severity is not None and e.severity >= 4)
 
     def _get_top_foods(self, entries: List[DayEntry], limit: int = 10) -> List[Tuple[str, int]]:
-        """Get the most frequently consumed foods"""
-        food_counts = defaultdict(int)
-
-        for entry in entries:
-            for food in entry.foods:
-                food_counts[food] += 1
-
-        sorted_foods = sorted(food_counts.items(), key=lambda x: x[1], reverse=True)
-        return sorted_foods[:limit]
+        counts = defaultdict(int)
+        for e in entries:
+            for f in e.foods:
+                counts[f] += 1
+        return sorted(counts.items(), key=lambda x: x[1], reverse=True)[:limit]
 
     def _calculate_food_correlations(self, entries: List[DayEntry]) -> List[Dict]:
-        """
-        Calculate correlation between foods and severity.
-        Returns foods sorted by their average associated severity.
-        """
-        food_data = defaultdict(lambda: {'severities': [], 'count': 0})
-
-        for entry in entries:
-            for food in entry.foods:
-                food_data[food]['severities'].append(entry.severity)
-                food_data[food]['count'] += 1
-
-        correlations = []
+        food_data: Dict[str, Dict] = defaultdict(lambda: {'severities': [], 'count': 0})
+        for e in entries:
+            for f in e.foods:
+                food_data[f]['severities'].append(e.severity)
+                food_data[f]['count'] += 1
+        result = []
         for food, data in food_data.items():
-            if data['count'] >= 2:  # Need at least 2 occurrences
-                avg_severity = sum(data['severities']) / len(data['severities'])
-                correlations.append({
+            if data['count'] >= 2:
+                avg = sum(data['severities']) / len(data['severities'])
+                result.append({
                     'food': food,
                     'count': data['count'],
-                    'average_severity': round(avg_severity, 2),
-                    'severities': data['severities']
+                    'average_severity': round(avg, 2),
+                    'severities': data['severities'],
                 })
-
-        # Sort by average severity (highest first - potential triggers)
-        correlations.sort(key=lambda x: x['average_severity'], reverse=True)
-
-        return correlations
+        result.sort(key=lambda x: x['average_severity'], reverse=True)
+        return result
 
     def _calculate_weekly_averages(self, entries: List[DayEntry]) -> List[Dict]:
-        """Calculate weekly severity averages"""
         if not entries:
             return []
-
-        # Group entries by week
-        weeks = defaultdict(list)
-
-        for entry in entries:
-            entry_date = date.fromisoformat(entry.date)
-            # Get the Monday of that week
-            week_start = entry_date - timedelta(days=entry_date.weekday())
-            weeks[week_start].append(entry.severity)
-
-        # Calculate averages
-        weekly_data = []
-        for week_start in sorted(weeks.keys()):
-            severities = weeks[week_start]
-            avg = sum(severities) / len(severities)
-
-            # Format week label
-            week_end = week_start + timedelta(days=6)
-            if week_start.month == week_end.month:
-                label = f"{week_start.day}.-{week_end.day}. {week_start.strftime('%b')}"
-            else:
-                label = f"{week_start.day}. {week_start.strftime('%b')} - {week_end.day}. {week_end.strftime('%b')}"
-
-            weekly_data.append({
-                'week_start': week_start.isoformat(),
+        weeks: Dict[date, List[float]] = defaultdict(list)
+        for e in entries:
+            if e.severity is None:
+                continue
+            d = date.fromisoformat(e.date)
+            week_start = d - timedelta(days=d.weekday())
+            weeks[week_start].append(e.severity)
+        weekly = []
+        for ws in sorted(weeks.keys()):
+            we = ws + timedelta(days=6)
+            label = (
+                f"{ws.day}.-{we.day}. {ws.strftime('%b')}"
+                if ws.month == we.month
+                else f"{ws.day}. {ws.strftime('%b')} - {we.day}. {we.strftime('%b')}"
+            )
+            sevs = weeks[ws]
+            weekly.append({
+                'week_start': ws.isoformat(),
                 'week_label': label,
-                'average': round(avg, 2),
-                'count': len(severities)
+                'average': round(sum(sevs) / len(sevs), 2),
+                'count': len(sevs),
             })
-
-        return weekly_data[-8:]  # Return last 8 weeks
+        return weekly[-8:]
 
     def _calculate_day_of_week_averages(self, entries: List[DayEntry]) -> Dict[int, float]:
-        """Calculate average severity for each day of the week"""
-        day_data = defaultdict(list)
-
-        for entry in entries:
-            entry_date = date.fromisoformat(entry.date)
-            day_num = entry_date.weekday()  # 0=Monday, 6=Sunday
-            day_data[day_num].append(entry.severity)
-
-        averages = {}
-        for day_num in range(7):
-            severities = day_data[day_num]
-            if severities:
-                averages[day_num] = round(sum(severities) / len(severities), 2)
-            else:
-                averages[day_num] = 0
-
-        return averages
+        day_data: Dict[int, List[float]] = defaultdict(list)
+        for e in entries:
+            if e.severity is None:
+                continue
+            day_data[date.fromisoformat(e.date).weekday()].append(e.severity)
+        return {
+            d: round(sum(v) / len(v), 2) if v else 0
+            for d in range(7)
+            for v in [day_data[d]]
+        }
 
     def _calculate_streak_info(self, entries: List[DayEntry]) -> Dict:
-        """Calculate streak information (consecutive good/bad days)"""
         if not entries:
             return {'current_streak': 0, 'streak_type': None, 'best_good_streak': 0}
-
-        # Sort entries by date
         sorted_entries = sorted(entries, key=lambda x: x.date)
-
-        best_good_streak = 0
-        current_good_streak = 0
-
-        for entry in sorted_entries:
-            if entry.severity <= 2:
-                current_good_streak += 1
-                best_good_streak = max(best_good_streak, current_good_streak)
+        best_good = cur_good = 0
+        for e in sorted_entries:
+            if e.severity is not None and e.severity <= 2:
+                cur_good += 1
+                best_good = max(best_good, cur_good)
             else:
-                current_good_streak = 0
-
-        # Calculate current streak (from today backwards)
-        today_str = date.today().isoformat()
+                cur_good = 0
         current_streak = 0
         streak_type = None
-
-        for entry in reversed(sorted_entries):
+        for e in reversed(sorted_entries):
             if current_streak == 0:
-                streak_type = 'good' if entry.severity <= 2 else 'bad'
+                streak_type = 'good' if (e.severity or 0) <= 2 else 'bad'
                 current_streak = 1
             else:
-                if streak_type == 'good' and entry.severity <= 2:
+                if streak_type == 'good' and (e.severity or 0) <= 2:
                     current_streak += 1
-                elif streak_type == 'bad' and entry.severity >= 4:
+                elif streak_type == 'bad' and (e.severity or 0) >= 4:
                     current_streak += 1
                 else:
                     break
-
         return {
             'current_streak': current_streak,
             'streak_type': streak_type,
-            'best_good_streak': best_good_streak
+            'best_good_streak': best_good,
         }
 
-    def get_potential_triggers(self, threshold: float = 3.5, min_occurrences: int = 3) -> List[Dict]:
-        """
-        Identify foods that might be triggers.
+    def _weather_distribution(self, entries: List[DayEntry]) -> Dict[str, int]:
+        dist: Dict[str, int] = defaultdict(int)
+        for e in entries:
+            if e.weather:
+                dist[e.weather] += 1
+        return dict(dist)
 
-        Args:
-            threshold: Minimum average severity to consider as trigger
-            min_occurrences: Minimum times food must appear
-
-        Returns:
-            List of potential trigger foods with statistics
-        """
-        entries = self.data_manager.get_all_entries()
-        correlations = self._calculate_food_correlations(entries)
-
-        triggers = [
-            food_data for food_data in correlations
-            if food_data['average_severity'] >= threshold
-            and food_data['count'] >= min_occurrences
-        ]
-
-        return triggers
-
-    def get_safe_foods(self, threshold: float = 2.5, min_occurrences: int = 3) -> List[Dict]:
-        """
-        Identify foods that seem safe.
-
-        Args:
-            threshold: Maximum average severity to consider as safe
-            min_occurrences: Minimum times food must appear
-
-        Returns:
-            List of safe foods with statistics
-        """
-        entries = self.data_manager.get_all_entries()
-        correlations = self._calculate_food_correlations(entries)
-
-        safe_foods = [
-            food_data for food_data in correlations
-            if food_data['average_severity'] <= threshold
-            and food_data['count'] >= min_occurrences
-        ]
-
-        # Sort by lowest severity first
-        safe_foods.sort(key=lambda x: x['average_severity'])
-
-        return safe_foods
-
-    def get_summary(self, days: int = 30) -> str:
-        """
-        Get a text summary of the analysis.
-
-        Args:
-            days: Number of days to analyze
-
-        Returns:
-            Human-readable summary text
-        """
-        stats = self.calculate_all(days)
-
-        if stats['total_entries'] == 0:
-            return "Noch keine Einträge vorhanden. Beginne mit dem Tracking um Analysen zu erhalten."
-
-        lines = [
-            f"Zusammenfassung der letzten {days} Tage:",
-            f"",
-            f"📊 {stats['total_entries']} Einträge erfasst",
-            f"📈 Durchschnittliche Schwere: {stats['average_severity']:.1f}",
-            f"😊 {stats['good_days']} gute Tage (Schwere 1-2)",
-            f"😟 {stats['bad_days']} schlechte Tage (Schwere 4-5)",
-            f""
-        ]
-
-        # Add potential triggers
-        triggers = self.get_potential_triggers()
-        if triggers:
-            lines.append("⚠️ Mögliche Trigger:")
-            for trigger in triggers[:3]:
-                lines.append(f"   • {trigger['food']} (Ø {trigger['average_severity']:.1f})")
-            lines.append("")
-
-        # Add safe foods
-        safe = self.get_safe_foods()
-        if safe:
-            lines.append("✅ Gut verträgliche Lebensmittel:")
-            for food in safe[:3]:
-                lines.append(f"   • {food['food']} (Ø {food['average_severity']:.1f})")
-
-        return "\n".join(lines)
-
-    def compare_periods(self, period1_days: int, period2_days: int) -> Dict:
-        """
-        Compare statistics between two time periods.
-
-        Args:
-            period1_days: Days in first period (more recent)
-            period2_days: Days in second period (older)
-
-        Returns:
-            Comparison data
-        """
-        today = date.today()
-
-        # Period 1: most recent
-        p1_end = today
-        p1_start = today - timedelta(days=period1_days)
-        p1_entries = self.data_manager.get_entries_in_range(p1_start, p1_end)
-
-        # Period 2: before period 1
-        p2_end = p1_start - timedelta(days=1)
-        p2_start = p2_end - timedelta(days=period2_days)
-        p2_entries = self.data_manager.get_entries_in_range(p2_start, p2_end)
-
-        p1_avg = self._calculate_average_severity(p1_entries) if p1_entries else 0
-        p2_avg = self._calculate_average_severity(p2_entries) if p2_entries else 0
-
-        return {
-            'period1': {
-                'start': p1_start.isoformat(),
-                'end': p1_end.isoformat(),
-                'entries': len(p1_entries),
-                'average_severity': p1_avg
-            },
-            'period2': {
-                'start': p2_start.isoformat(),
-                'end': p2_end.isoformat(),
-                'entries': len(p2_entries),
-                'average_severity': p2_avg
-            },
-            'change': round(p1_avg - p2_avg, 2),
-            'improved': p1_avg < p2_avg
-        }
+    # ── Pattern detection: foods (original, unchanged API) ────────────────────
 
     def detect_patterns(self, delay_days: int = 2, severity_threshold: int = 4) -> List[Dict]:
         """
-        Detect patterns between food consumption and skin reactions with a time delay.
-
-        This analyzes whether eating certain foods correlates with worsening
-        skin condition 1-N days later.
-
-        Args:
-            delay_days: Maximum days to look ahead for reaction (1-3)
-            severity_threshold: Minimum severity to consider as a "bad" day
-
-        Returns:
-            List of detected patterns with probability scores
+        Detect food → skin-reaction patterns with a configurable time delay.
+        Minimum 3 occurrences required for a result to appear.
         """
         entries = self.data_manager.get_all_entries()
         if len(entries) < 5:
             return []
 
-        # Create a date-to-entry lookup
-        entry_by_date = {}
-        for entry in entries:
-            entry_date = date.fromisoformat(entry.date)
-            entry_by_date[entry_date] = entry
+        emap = self._entry_map(entries)
+        patterns: Dict[str, Dict] = defaultdict(lambda: {'total': 0, 'bad': 0, 'details': []})
 
-        # Track patterns: food -> {occurrences, followed_by_bad_days}
-        patterns = defaultdict(lambda: {
-            'total_occurrences': 0,
-            'followed_by_bad': 0,
-            'bad_days_detail': []
-        })
-
-        # Analyze each entry
-        for entry in entries:
-            if not entry.foods:
+        for e in entries:
+            if not e.foods:
                 continue
+            edate = date.fromisoformat(e.date)
+            for food in e.foods:
+                patterns[food]['total'] += 1
+                for offset in range(1, delay_days + 1):
+                    fut = emap.get(edate + timedelta(days=offset))
+                    if fut and fut.severity is not None and fut.severity >= severity_threshold:
+                        patterns[food]['bad'] += 1
+                        patterns[food]['details'].append({
+                            'food_date': e.date,
+                            'reaction_date': fut.date,
+                            'delay': offset,
+                            'severity': fut.severity,
+                        })
+                        break
 
-            entry_date = date.fromisoformat(entry.date)
-
-            # Check following days within delay window
-            for food in entry.foods:
-                patterns[food]['total_occurrences'] += 1
-
-                # Look at days 1 to delay_days after this entry
-                for day_offset in range(1, delay_days + 1):
-                    check_date = entry_date + timedelta(days=day_offset)
-                    if check_date in entry_by_date:
-                        future_entry = entry_by_date[check_date]
-                        if future_entry.severity >= severity_threshold:
-                            patterns[food]['followed_by_bad'] += 1
-                            patterns[food]['bad_days_detail'].append({
-                                'food_date': entry.date,
-                                'reaction_date': future_entry.date,
-                                'delay': day_offset,
-                                'severity': future_entry.severity
-                            })
-                            break  # Count only once per food-consumption event
-
-        # Calculate probabilities and filter meaningful patterns
         result = []
         for food, data in patterns.items():
-            if data['total_occurrences'] >= 3:  # Minimum 3 occurrences for reliability
-                probability = (data['followed_by_bad'] / data['total_occurrences']) * 100
+            if data['total'] >= 3:
+                prob = round((data['bad'] / data['total']) * 100, 1)
                 result.append({
                     'food': food,
-                    'total_occurrences': data['total_occurrences'],
-                    'triggered_reactions': data['followed_by_bad'],
-                    'probability': round(probability, 1),
-                    'details': data['bad_days_detail'][:5]  # Show last 5 examples
+                    'total_occurrences': data['total'],
+                    'triggered_reactions': data['bad'],
+                    'probability': prob,
+                    'details': data['details'][:5],
+                    'trigger_type': 'food',
+                    'is_nickel_rich': food in NICKEL_RICH_FOODS,
                 })
-
-        # Sort by probability (highest first)
         result.sort(key=lambda x: x['probability'], reverse=True)
         return result
 
-    def get_pattern_summary(self, delay_days: int = 2) -> str:
-        """Get a human-readable summary of detected patterns"""
-        patterns = self.detect_patterns(delay_days)
+    # ── NEW: Fungal / Id-reaction analysis ────────────────────────────────────
 
+    def detect_fungal_pattern(self, look_ahead_days: int = 14) -> Dict:
+        """
+        Analyse the Tinea pedis → Dyshidrosiform Id-reaction delay pattern.
+
+        For each day where fungal_active flips from False/None to True we track
+        severity over the following `look_ahead_days` days to find:
+          - typical delay until flare onset
+          - peak severity timing
+          - average severity lift vs. baseline
+
+        Returns a dict with:
+          onset_events      – list of detected flare onsets
+          avg_baseline      – avg severity without active fungus
+          avg_fungal_active – avg severity on fungal-active days
+          avg_peak_delay    – avg days until peak after fungal onset
+          flare_probability – % of fungal onsets followed by severity ≥4
+        """
+        entries = self.data_manager.get_all_entries()
+        if len(entries) < 5:
+            return {'insufficient_data': True}
+
+        emap = self._entry_map(entries)
+        sorted_entries = sorted(entries, key=lambda x: x.date)
+
+        # Split severities by fungal status
+        sev_no_fungus = [
+            e.severity for e in sorted_entries
+            if e.severity is not None and not e.fungal_active
+        ]
+        sev_with_fungus = [
+            e.severity for e in sorted_entries
+            if e.severity is not None and e.fungal_active
+        ]
+
+        # Detect onset events (day fungal_active first becomes True in a sequence)
+        onset_events = []
+        prev_fungal = False
+        for e in sorted_entries:
+            current = bool(e.fungal_active)
+            if current and not prev_fungal:
+                # Onset detected
+                onset_date = date.fromisoformat(e.date)
+                window_sevs = []
+                for offset in range(0, look_ahead_days + 1):
+                    fut = emap.get(onset_date + timedelta(days=offset))
+                    if fut and fut.severity is not None:
+                        window_sevs.append((offset, fut.severity))
+
+                if window_sevs:
+                    peak_offset, peak_sev = max(window_sevs, key=lambda x: x[1])
+                    onset_events.append({
+                        'onset_date': e.date,
+                        'peak_delay_days': peak_offset,
+                        'peak_severity': peak_sev,
+                        'window_data': window_sevs,
+                        'flare_triggered': peak_sev >= 4,
+                    })
+            prev_fungal = current
+
+        flare_count = sum(1 for ev in onset_events if ev['flare_triggered'])
+        avg_peak_delay = (
+            round(sum(ev['peak_delay_days'] for ev in onset_events) / len(onset_events), 1)
+            if onset_events else None
+        )
+
+        return {
+            'insufficient_data': False,
+            'onset_events': onset_events,
+            'total_onsets': len(onset_events),
+            'avg_baseline_severity': self._avg(sev_no_fungus),
+            'avg_fungal_active_severity': self._avg(sev_with_fungus),
+            'avg_peak_delay_days': avg_peak_delay,
+            'flare_probability': round(flare_count / len(onset_events) * 100, 1) if onset_events else 0,
+        }
+
+    # ── NEW: Stress analysis ──────────────────────────────────────────────────
+
+    def detect_stress_pattern(self, delay_days: int = 2, severity_threshold: int = 4) -> Dict:
+        """
+        Correlate stress levels with skin severity (same day + N days later).
+
+        Returns:
+          stress_severity_by_level  – avg skin severity per stress level (1-5)
+          high_stress_flare_prob    – % of stress ≥4 days followed by flare
+          correlation_hint          – human-readable string
+          delayed_patterns          – list of detected stress→flare events
+        """
+        entries = self.data_manager.get_all_entries()
+        emap = self._entry_map(entries)
+
+        # Average severity grouped by stress level (same day)
+        sev_by_stress: Dict[int, List[float]] = defaultdict(list)
+        for e in entries:
+            if e.stress_level is not None and e.severity is not None:
+                sev_by_stress[e.stress_level].append(e.severity)
+
+        stress_severity_by_level = {
+            lvl: self._avg(sevs) for lvl, sevs in sev_by_stress.items()
+        }
+
+        # High-stress → flare probability (time-delayed)
+        high_stress_events = 0
+        high_stress_flares = 0
+        delayed_patterns = []
+
+        for e in entries:
+            if e.stress_level is None or e.stress_level < 4:
+                continue
+            edate = date.fromisoformat(e.date)
+            high_stress_events += 1
+            for offset in range(0, delay_days + 1):
+                fut = emap.get(edate + timedelta(days=offset))
+                if fut and fut.severity is not None and fut.severity >= severity_threshold:
+                    high_stress_flares += 1
+                    delayed_patterns.append({
+                        'stress_date': e.date,
+                        'stress_level': e.stress_level,
+                        'reaction_date': fut.date,
+                        'delay': offset,
+                        'severity': fut.severity,
+                    })
+                    break
+
+        flare_prob = (
+            round(high_stress_flares / high_stress_events * 100, 1)
+            if high_stress_events else 0
+        )
+
+        # Pearson-like correlation (simplified: higher stress → higher severity)
+        pairs = [
+            (e.stress_level, e.severity)
+            for e in entries
+            if e.stress_level is not None and e.severity is not None
+        ]
+        correlation = self._simple_correlation(pairs)
+
+        return {
+            'stress_severity_by_level': stress_severity_by_level,
+            'high_stress_events': high_stress_events,
+            'high_stress_flare_probability': flare_prob,
+            'correlation': correlation,
+            'delayed_patterns': delayed_patterns[:10],
+        }
+
+    def _simple_correlation(self, pairs: List[Tuple[float, float]]) -> Optional[float]:
+        """Return a -1 to +1 Pearson-like correlation coefficient."""
+        if len(pairs) < 3:
+            return None
+        n = len(pairs)
+        xs = [p[0] for p in pairs]
+        ys = [p[1] for p in pairs]
+        mean_x = sum(xs) / n
+        mean_y = sum(ys) / n
+        num = sum((x - mean_x) * (y - mean_y) for x, y in pairs)
+        den_x = sum((x - mean_x) ** 2 for x in xs) ** 0.5
+        den_y = sum((y - mean_y) ** 2 for y in ys) ** 0.5
+        if den_x == 0 or den_y == 0:
+            return None
+        return round(num / (den_x * den_y), 2)
+
+    # ── NEW: Nickel-load analysis ─────────────────────────────────────────────
+
+    def get_nickel_analysis(self) -> Dict:
+        """
+        Calculate daily nickel load (count of nickel-rich foods consumed)
+        and correlate with skin severity.
+
+        Returns:
+          avg_severity_by_nickel_load  – dict {nickel_count: avg_severity}
+          high_nickel_flare_prob       – % of high-nickel days (≥2 foods) → flare
+          nickel_food_frequencies      – {food: count} for nickel-rich foods only
+        """
+        entries = self.data_manager.get_all_entries()
+        emap = self._entry_map(entries)
+
+        sev_by_load: Dict[int, List[float]] = defaultdict(list)
+        nickel_food_counts: Dict[str, int] = defaultdict(int)
+        high_nickel_events = 0
+        high_nickel_flares = 0
+
+        for e in entries:
+            nickel_count = sum(1 for f in e.foods if f in NICKEL_RICH_FOODS)
+            for f in e.foods:
+                if f in NICKEL_RICH_FOODS:
+                    nickel_food_counts[f] += 1
+
+            if e.severity is not None:
+                sev_by_load[nickel_count].append(e.severity)
+
+            if nickel_count >= 2:
+                high_nickel_events += 1
+                edate = date.fromisoformat(e.date)
+                for offset in range(0, 3):
+                    fut = emap.get(edate + timedelta(days=offset))
+                    if fut and fut.severity is not None and fut.severity >= 4:
+                        high_nickel_flares += 1
+                        break
+
+        return {
+            'avg_severity_by_nickel_load': {
+                load: self._avg(sevs) for load, sevs in sev_by_load.items()
+            },
+            'high_nickel_flare_probability': (
+                round(high_nickel_flares / high_nickel_events * 100, 1)
+                if high_nickel_events else 0
+            ),
+            'nickel_food_frequencies': dict(
+                sorted(nickel_food_counts.items(), key=lambda x: x[1], reverse=True)
+            ),
+        }
+
+    # ── NEW: Weather impact analysis ──────────────────────────────────────────
+
+    def get_weather_analysis(self) -> Dict[str, float]:
+        """Return average severity per weather category."""
+        entries = self.data_manager.get_all_entries()
+        sev_by_weather: Dict[str, List[float]] = defaultdict(list)
+        for e in entries:
+            if e.weather and e.severity is not None:
+                sev_by_weather[e.weather].append(e.severity)
+        return {w: self._avg(s) for w, s in sev_by_weather.items()}
+
+    # ── NEW: Sleep impact ─────────────────────────────────────────────────────
+
+    def get_sleep_analysis(self) -> Dict:
+        """Correlate sleep quality with next-day severity."""
+        entries = self.data_manager.get_all_entries()
+        emap = self._entry_map(entries)
+
+        sev_by_sleep: Dict[int, List[float]] = defaultdict(list)
+        next_day_impact: Dict[int, List[float]] = defaultdict(list)
+
+        for e in entries:
+            if e.sleep_quality is not None and e.severity is not None:
+                sev_by_sleep[e.sleep_quality].append(e.severity)
+            if e.sleep_quality is not None:
+                tomorrow = emap.get(date.fromisoformat(e.date) + timedelta(days=1))
+                if tomorrow and tomorrow.severity is not None:
+                    next_day_impact[e.sleep_quality].append(tomorrow.severity)
+
+        return {
+            'same_day': {q: self._avg(s) for q, s in sev_by_sleep.items()},
+            'next_day': {q: self._avg(s) for q, s in next_day_impact.items()},
+            'correlation': self._simple_correlation([
+                (e.sleep_quality, e.severity)
+                for e in entries
+                if e.sleep_quality is not None and e.severity is not None
+            ]),
+        }
+
+    # ── NEW: Universal multi-factor pattern detection ─────────────────────────
+
+    def detect_all_trigger_patterns(
+        self, delay_days: int = 2, severity_threshold: int = 4
+    ) -> List[Dict]:
+        """
+        Unified trigger pattern table covering ALL tracked factors:
+          - Individual foods
+          - High stress (≥4)
+          - Active fungal infection
+          - Bad sleep (≤2)
+          - Weather types
+          - Sweating
+          - Contact exposures
+
+        Returns a flat list of trigger dicts, each with:
+          trigger_type, trigger_label, total_occurrences,
+          triggered_reactions, probability, details
+        """
+        entries = self.data_manager.get_all_entries()
+        if len(entries) < 5:
+            return []
+
+        emap = self._entry_map(entries)
+        results: List[Dict] = []
+
+        # Helper: test trigger events
+        def analyse(label: str, ttype: str, event_filter, extra: Dict = None) -> Optional[Dict]:
+            events = [(e, date.fromisoformat(e.date)) for e in entries if event_filter(e)]
+            if not events:
+                return None
+            total = len(events)
+            bad = 0
+            details = []
+            for e, edate in events:
+                for offset in range(0, delay_days + 1):
+                    fut = emap.get(edate + timedelta(days=offset))
+                    if fut and fut.severity is not None and fut.severity >= severity_threshold:
+                        bad += 1
+                        details.append({
+                            'trigger_date': e.date,
+                            'reaction_date': fut.date,
+                            'delay': offset,
+                            'severity': fut.severity,
+                        })
+                        break
+            if total < 2:
+                return None
+            prob = round(bad / total * 100, 1)
+            r = {
+                'trigger_label': label,
+                'trigger_type': ttype,
+                'total_occurrences': total,
+                'triggered_reactions': bad,
+                'probability': prob,
+                'details': details[:5],
+            }
+            if extra:
+                r.update(extra)
+            return r
+
+        # Foods
+        all_foods: Dict[str, int] = defaultdict(int)
+        for e in entries:
+            for f in e.foods:
+                all_foods[f] += 1
+        for food in all_foods:
+            r = analyse(
+                label=food,
+                ttype='food',
+                event_filter=lambda e, f=food: f in e.foods,
+                extra={'is_nickel_rich': food in NICKEL_RICH_FOODS},
+            )
+            if r and r['total_occurrences'] >= 3:
+                results.append(r)
+
+        # Stress ≥4
+        r = analyse("Hoher Stress (≥4)", 'stress',
+                    lambda e: e.stress_level is not None and e.stress_level >= 4)
+        if r:
+            results.append(r)
+
+        # Stress = 5
+        r = analyse("Extremer Stress (5)", 'stress',
+                    lambda e: e.stress_level == 5)
+        if r:
+            results.append(r)
+
+        # Fungal active
+        r = analyse("Zehenpilz aktiv 🍄", 'fungal',
+                    lambda e: e.fungal_active is True)
+        if r:
+            results.append(r)
+
+        # Bad sleep (≤2)
+        r = analyse("Schlechter Schlaf (≤2)", 'sleep',
+                    lambda e: e.sleep_quality is not None and e.sleep_quality <= 2)
+        if r:
+            results.append(r)
+
+        # Good sleep (≥4) — protective factor
+        r = analyse("Guter Schlaf (≥4)", 'sleep',
+                    lambda e: e.sleep_quality is not None and e.sleep_quality >= 4)
+        if r:
+            results.append(r)
+
+        # Weather types
+        weathers: Dict[str, int] = defaultdict(int)
+        for e in entries:
+            if e.weather:
+                weathers[e.weather] += 1
+        for w in weathers:
+            r = analyse(f"Wetter: {w}", 'weather',
+                        lambda e, ww=w: e.weather == ww)
+            if r and r['total_occurrences'] >= 3:
+                results.append(r)
+
+        # Sweating
+        r = analyse("Starkes Schwitzen 💧", 'sweating',
+                    lambda e: e.sweating is True)
+        if r:
+            results.append(r)
+
+        # Contact exposures
+        contact_items: Dict[str, int] = defaultdict(int)
+        for e in entries:
+            for c in (e.contact_exposures or []):
+                contact_items[c] += 1
+        for item in contact_items:
+            r = analyse(f"Kontakt: {item}", 'contact',
+                        lambda e, ci=item: ci in (e.contact_exposures or []))
+            if r and r['total_occurrences'] >= 3:
+                results.append(r)
+
+        results.sort(key=lambda x: x['probability'], reverse=True)
+        return results
+
+    # ── Legacy helpers (kept for backward compat) ──────────────────────────────
+
+    def get_potential_triggers(self, threshold: float = 3.5, min_occurrences: int = 3) -> List[Dict]:
+        entries = self.data_manager.get_all_entries()
+        return [
+            d for d in self._calculate_food_correlations(entries)
+            if d['average_severity'] >= threshold and d['count'] >= min_occurrences
+        ]
+
+    def get_safe_foods(self, threshold: float = 2.5, min_occurrences: int = 3) -> List[Dict]:
+        entries = self.data_manager.get_all_entries()
+        safe = [
+            d for d in self._calculate_food_correlations(entries)
+            if d['average_severity'] <= threshold and d['count'] >= min_occurrences
+        ]
+        safe.sort(key=lambda x: x['average_severity'])
+        return safe
+
+    def get_summary(self, days: int = 30) -> str:
+        stats = self.calculate_all(days)
+        if stats['total_entries'] == 0:
+            return "Noch keine Einträge vorhanden. Beginne mit dem Tracking um Analysen zu erhalten."
+
+        lines = [
+            f"Zusammenfassung der letzten {days} Tage:",
+            "",
+            f"📊 {stats['total_entries']} Einträge erfasst",
+            f"📈 Durchschnittliche Schwere: {stats['average_severity']:.1f}",
+            f"😊 {stats['good_days']} gute Tage (Schwere 1-2)",
+            f"😟 {stats['bad_days']} schlechte Tage (Schwere 4-5)",
+        ]
+        if stats['average_stress']:
+            lines.append(f"😰 Ø Stress: {stats['average_stress']:.1f}")
+        if stats['fungal_days']:
+            lines.append(f"🍄 Pilz-Tage: {stats['fungal_days']}")
+        if stats['average_sleep']:
+            lines.append(f"😴 Ø Schlaf: {stats['average_sleep']:.1f}")
+        lines.append("")
+        triggers = self.get_potential_triggers()
+        if triggers:
+            lines.append("⚠️ Mögliche Nahrungsmittel-Trigger:")
+            for t in triggers[:3]:
+                lines.append(f"   • {t['food']} (Ø {t['average_severity']:.1f})")
+        return "\n".join(lines)
+
+    def compare_periods(self, period1_days: int, period2_days: int) -> Dict:
+        today = date.today()
+        p1_end = today
+        p1_start = today - timedelta(days=period1_days)
+        p1_entries = self.data_manager.get_entries_in_range(p1_start, p1_end)
+        p2_end = p1_start - timedelta(days=1)
+        p2_start = p2_end - timedelta(days=period2_days)
+        p2_entries = self.data_manager.get_entries_in_range(p2_start, p2_end)
+        p1_avg = self._calculate_average_severity(p1_entries) if p1_entries else 0
+        p2_avg = self._calculate_average_severity(p2_entries) if p2_entries else 0
+        return {
+            'period1': {'start': p1_start.isoformat(), 'end': p1_end.isoformat(),
+                        'entries': len(p1_entries), 'average_severity': p1_avg},
+            'period2': {'start': p2_start.isoformat(), 'end': p2_end.isoformat(),
+                        'entries': len(p2_entries), 'average_severity': p2_avg},
+            'change': round(p1_avg - p2_avg, 2),
+            'improved': p1_avg < p2_avg,
+        }
+
+    def get_pattern_summary(self, delay_days: int = 2) -> str:
+        patterns = self.detect_patterns(delay_days)
         if not patterns:
             return "Noch nicht genügend Daten für Muster-Erkennung. Mindestens 5 Einträge erforderlich."
-
         lines = [f"Muster-Analyse (Zeitfenster: {delay_days} Tage)\n"]
-
-        high_risk = [p for p in patterns if p['probability'] >= 50]
-        medium_risk = [p for p in patterns if 25 <= p['probability'] < 50]
-
-        if high_risk:
+        high = [p for p in patterns if p['probability'] >= 50]
+        mid = [p for p in patterns if 25 <= p['probability'] < 50]
+        if high:
             lines.append("⚠️ Hohe Wahrscheinlichkeit (>50%):")
-            for p in high_risk[:3]:
+            for p in high[:3]:
                 lines.append(f"   • {p['food']}: {p['probability']}% ({p['triggered_reactions']}/{p['total_occurrences']} mal)")
-
-        if medium_risk:
+        if mid:
             lines.append("\n⚡ Mittlere Wahrscheinlichkeit (25-50%):")
-            for p in medium_risk[:3]:
+            for p in mid[:3]:
                 lines.append(f"   • {p['food']}: {p['probability']}% ({p['triggered_reactions']}/{p['total_occurrences']} mal)")
-
         return "\n".join(lines)
