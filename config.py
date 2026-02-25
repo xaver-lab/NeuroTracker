@@ -19,6 +19,7 @@ ICONS_DIR = RESOURCES_DIR / "icons"
 ENTRIES_FILE = DATA_DIR / "entries.json"
 FOOD_SUGGESTIONS_FILE = DATA_DIR / "food_suggestions.json"
 SETTINGS_FILE = DATA_DIR / "settings.json"
+SYNC_STATUS_FILE = DATA_DIR / "sync_status.json"
 
 # Google Drive Settings
 GOOGLE_DRIVE_ENABLED = True  # Enable Google Drive sync
@@ -125,6 +126,71 @@ EXPORT_DATE_FORMAT = "%d.%m.%Y"
 # Statistics Settings
 STATS_MIN_DAYS = 7  # Minimum days needed for meaningful statistics
 CORRELATION_THRESHOLD = 0.5  # Threshold for significant correlation
+
+# ── Modular Trigger-Tracker ──────────────────────────────────────────────────
+# Each module can be individually enabled/disabled by the user via the settings
+# menu. These are the DEFAULT states on first launch.
+TRACKER_MODULES = {
+    "stress":   {"label": "Stresslevel",        "enabled": True,  "icon": "😰"},
+    "fungal":   {"label": "Zehenpilz (Mykose)",  "enabled": True,  "icon": "🍄"},
+    "sleep":    {"label": "Schlafqualität",       "enabled": True,  "icon": "😴"},
+    "weather":  {"label": "Wetter / Umgebung",    "enabled": True,  "icon": "🌤"},
+    "sweating": {"label": "Schwitzen",            "enabled": False, "icon": "💧"},
+    "contact":  {"label": "Kontaktexposition",    "enabled": False, "icon": "🧤"},
+}
+
+# Weather options (German)
+WEATHER_OPTIONS = [
+    "Normal",
+    "Trocken / Heizungsluft",
+    "Feucht / Regen",
+    "Heiß / Schwül",
+    "Kalt / Frost",
+    "Windig",
+]
+
+# Contact allergen suggestions
+CONTACT_SUGGESTIONS = [
+    "Nickel (Schmuck/Gürtel)",
+    "Kobalt",
+    "Seife / Waschmittel",
+    "Desinfektionsmittel",
+    "Latex / Handschuhe",
+    "Reinigungsmittel",
+    "Parfüm / Kosmetik",
+    "Farbe / Lösungsmittel",
+]
+
+# Nickel-rich foods (scientific sources: Pubmed, DermNetNZ)
+# These trigger systemic contact dermatitis / dyshidrotic flares in nickel-sensitive patients
+NICKEL_RICH_FOODS = {
+    "Schokolade", "Kakao",
+    "Hafer", "Haferflocken", "Müsli",
+    "Weizen", "Weizen Brot", "Weizen Pasta",
+    "Erdnüsse", "Mandeln", "Walnüsse", "Haselnüsse",
+    "Tofu", "Soja", "Hülsenfrüchte",
+    "Tee", "Kaffee",
+    "Spinat", "Hülsenfrüchte", "Linsen",
+    "Vollkornbrot",
+}
+
+# Severity-style colors for stress (1=entspannt, 5=extremer Stress)
+STRESS_COLORS = {
+    1: "#4CAF50",
+    2: "#8BC34A",
+    3: "#FFC107",
+    4: "#FF9800",
+    5: "#F44336",
+}
+
+# Inverted colors for sleep quality (1=schlecht, 5=sehr gut)
+SLEEP_COLORS = {
+    1: "#F44336",
+    2: "#FF9800",
+    3: "#FFC107",
+    4: "#8BC34A",
+    5: "#4CAF50",
+}
 
 # Colors (QSS compatible)
 COLOR_PRIMARY = "#2196F3"
