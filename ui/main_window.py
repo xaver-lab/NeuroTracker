@@ -9,7 +9,7 @@ from typing import Optional
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QMenuBar, QMenu, QAction, QStatusBar, QMessageBox,
-    QFileDialog, QLabel, QFrame, QSplitter,
+    QFileDialog, QLabel, QFrame, QSplitter, QScrollArea,
     QDialog, QCheckBox, QPushButton, QDialogButtonBox,
 )
 from PyQt5.QtCore import Qt, QTimer
@@ -17,8 +17,9 @@ from PyQt5.QtGui import QFont, QIcon
 
 from config import (
     WINDOW_TITLE, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT,
-    COLOR_PRIMARY, COLOR_TEXT_SECONDARY, GOOGLE_DRIVE_ENABLED,
-    SYNC_INTERVAL_MINUTES
+    COLOR_PRIMARY, COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY,
+    GOOGLE_DRIVE_ENABLED, SYNC_INTERVAL_MINUTES,
+    SEVERITY_COLORS, STRESS_COLORS, SLEEP_COLORS, NICKEL_RICH_FOODS,
 )
 from models.data_manager import DataManager
 from models.food_manager import FoodManager
@@ -182,50 +183,218 @@ class MainWindow(QMainWindow):
         help_menu.addAction(help_action)
 
     def setup_central_widget(self):
-        """Setup the main content area"""
+        """Setup the main content area with top (entry+calendar) and bottom (detail)."""
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        outer_layout = QVBoxLayout(central_widget)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
 
-        # Entry panel (left side)
+        # ── Vertical splitter: top area / bottom detail ────────────────────────
+        self.v_splitter = QSplitter(Qt.Vertical)
+        self.v_splitter.setHandleWidth(4)
+        self.v_splitter.setStyleSheet("""
+            QSplitter::handle { background-color: #E0E0E0; }
+            QSplitter::handle:hover { background-color: #BDBDBD; }
+        """)
+
+        # ── TOP: horizontal splitter (entry panel | calendar) ──────────────────
+        self.h_splitter = QSplitter(Qt.Horizontal)
+        self.h_splitter.setHandleWidth(4)
+        self.h_splitter.setStyleSheet("""
+            QSplitter::handle { background-color: #E0E0E0; }
+            QSplitter::handle:hover { background-color: #BDBDBD; }
+        """)
+
+        # Entry panel (left)
         self.entry_panel = EntryPanel(self.data_manager, self.food_manager, self.settings_manager)
         self.entry_panel.entry_saved.connect(self.on_entry_saved)
         self.entry_panel.entry_deleted.connect(self.on_entry_deleted)
+        self.entry_panel.setMinimumWidth(320)
+        self.entry_panel.setMaximumWidth(500)
 
-        # Add left border frame
         panel_frame = QFrame()
         panel_frame.setStyleSheet("""
-            QFrame {
-                background-color: white;
-                border-right: 1px solid #E0E0E0;
-            }
+            QFrame { background-color: white; border-right: 1px solid #E0E0E0; }
         """)
         panel_layout = QVBoxLayout(panel_frame)
         panel_layout.setContentsMargins(0, 0, 0, 0)
         panel_layout.addWidget(self.entry_panel)
 
-        # Calendar widget (right side)
+        # Calendar (right)
         self.calendar_widget = CalendarWidget(self.data_manager)
         self.calendar_widget.date_selected.connect(self.on_date_selected)
 
-        # Use splitter for resizable panels
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(panel_frame)
-        splitter.addWidget(self.calendar_widget)
-        splitter.setStretchFactor(0, 0)  # Entry panel doesn't stretch
-        splitter.setStretchFactor(1, 1)  # Calendar stretches
-        splitter.setSizes([350, 850])
-        splitter.setHandleWidth(1)
-        splitter.setStyleSheet("""
-            QSplitter::handle {
-                background-color: #E0E0E0;
-            }
+        self.h_splitter.addWidget(panel_frame)
+        self.h_splitter.addWidget(self.calendar_widget)
+        self.h_splitter.setStretchFactor(0, 0)
+        self.h_splitter.setStretchFactor(1, 1)
+        self.h_splitter.setSizes([370, 830])
+
+        # ── BOTTOM: detail panel ───────────────────────────────────────────────
+        self.detail_panel = self._build_detail_panel()
+        self.detail_panel.setMinimumHeight(0)
+
+        self.v_splitter.addWidget(self.h_splitter)
+        self.v_splitter.addWidget(self.detail_panel)
+        self.v_splitter.setStretchFactor(0, 1)
+        self.v_splitter.setStretchFactor(1, 0)
+        self.v_splitter.setSizes([600, 200])
+
+        outer_layout.addWidget(self.v_splitter)
+
+    def _build_detail_panel(self) -> QFrame:
+        """Build the bottom detail panel that shows all info for the selected day."""
+        frame = QFrame()
+        frame.setStyleSheet("""
+            QFrame { background-color: white; border-top: 2px solid #E0E0E0; }
         """)
 
-        main_layout.addWidget(splitter)
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(16, 10, 16, 10)
+        layout.setSpacing(8)
+
+        # Header
+        self.detail_header = QLabel("Kein Tag ausgewählt")
+        self.detail_header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        self.detail_header.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; border: none;")
+        layout.addWidget(self.detail_header)
+
+        # Content: horizontal scroll with columns
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setStyleSheet("QScrollArea { border: none; }")
+
+        content = QWidget()
+        self.detail_content = QHBoxLayout(content)
+        self.detail_content.setContentsMargins(0, 0, 0, 0)
+        self.detail_content.setSpacing(20)
+
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+
+        return frame
+
+    def _update_detail_panel(self, selected_date):
+        """Fill the bottom detail panel with data from the selected entry."""
+        weekdays = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+        months = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
+
+        self.detail_header.setText(
+            f"{weekdays[selected_date.weekday()]}, {selected_date.day}. "
+            f"{months[selected_date.month - 1]} {selected_date.year}"
+        )
+
+        # Clear existing content
+        while self.detail_content.count():
+            item = self.detail_content.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        entry = self.data_manager.get_entry(selected_date)
+        if not entry:
+            lbl = QLabel("Noch kein Eintrag für diesen Tag")
+            lbl.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-style: italic; border: none;")
+            self.detail_content.addWidget(lbl)
+            self.detail_content.addStretch()
+            return
+
+        # ── Column: Hautzustand ─────────────────────────────────────────────
+        col = self._detail_column("Hautzustand")
+        sev = entry.severity or 0
+        color = SEVERITY_COLORS.get(sev, "#9E9E9E")
+        sev_texts = {1: "Sehr gut", 2: "Gut", 3: "Mittel", 4: "Schlecht", 5: "Sehr schlecht"}
+        sev_lbl = QLabel(f"  {sev} — {sev_texts.get(sev, '')}")
+        sev_lbl.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 14px; border: none;")
+        col.layout().addWidget(sev_lbl)
+        if entry.skin_notes:
+            n = QLabel(entry.skin_notes)
+            n.setWordWrap(True)
+            n.setMaximumWidth(200)
+            n.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 11px; border: none;")
+            col.layout().addWidget(n)
+        col.layout().addStretch()
+        self.detail_content.addWidget(col)
+
+        # ── Column: Lebensmittel ────────────────────────────────────────────
+        if entry.foods:
+            col = self._detail_column("Lebensmittel")
+            foods_text = ", ".join(entry.foods)
+            f_lbl = QLabel(foods_text)
+            f_lbl.setWordWrap(True)
+            f_lbl.setMaximumWidth(250)
+            f_lbl.setStyleSheet(f"font-size: 12px; border: none;")
+            col.layout().addWidget(f_lbl)
+            # Count nickel-rich
+            nickel = [f for f in entry.foods if f in NICKEL_RICH_FOODS]
+            if nickel:
+                ni_lbl = QLabel(f"[Ni] {', '.join(nickel)}")
+                ni_lbl.setStyleSheet("color: #E65100; font-size: 11px; border: none;")
+                ni_lbl.setWordWrap(True)
+                ni_lbl.setMaximumWidth(250)
+                col.layout().addWidget(ni_lbl)
+            if entry.food_notes:
+                fn = QLabel(entry.food_notes)
+                fn.setWordWrap(True)
+                fn.setMaximumWidth(200)
+                fn.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 11px; border: none;")
+                col.layout().addWidget(fn)
+            col.layout().addStretch()
+            self.detail_content.addWidget(col)
+
+        # ── Column: Trigger ─────────────────────────────────────────────────
+        triggers = []
+        if entry.stress_level is not None:
+            sc = STRESS_COLORS.get(entry.stress_level, "#9E9E9E")
+            triggers.append(f"<span style='color:{sc}'>😰 Stress: {entry.stress_level}/5</span>")
+        if entry.fungal_active:
+            triggers.append("<span style='color:#FF9800'>🍄 Zehenpilz aktiv</span>")
+        if entry.sleep_quality is not None:
+            slc = SLEEP_COLORS.get(entry.sleep_quality, "#9E9E9E")
+            triggers.append(f"<span style='color:{slc}'>😴 Schlaf: {entry.sleep_quality}/5</span>")
+        if entry.weather:
+            triggers.append(f"🌤 {entry.weather}")
+        if entry.sweating:
+            triggers.append("💧 Starkes Schwitzen")
+        if entry.contact_exposures:
+            triggers.append(f"🧤 {', '.join(entry.contact_exposures)}")
+
+        if triggers:
+            col = self._detail_column("Trigger")
+            for t in triggers:
+                lbl = QLabel(t)
+                lbl.setTextFormat(Qt.RichText)
+                lbl.setStyleSheet("font-size: 12px; border: none;")
+                col.layout().addWidget(lbl)
+            col.layout().addStretch()
+            self.detail_content.addWidget(col)
+
+        self.detail_content.addStretch()
+
+    def _detail_column(self, title: str) -> QFrame:
+        """Create a titled column for the detail panel."""
+        frame = QFrame()
+        frame.setMinimumWidth(150)
+        frame.setStyleSheet("""
+            QFrame {
+                background-color: #FAFAFA;
+                border: 1px solid #E8E8E8;
+                border-radius: 6px;
+                padding: 8px;
+            }
+        """)
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
+
+        header = QLabel(title)
+        header.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        header.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; border: none;")
+        layout.addWidget(header)
+        return frame
 
     def setup_status_bar(self):
         """Setup the status bar"""
@@ -253,17 +422,20 @@ class MainWindow(QMainWindow):
     def on_date_selected(self, selected_date: date):
         """Handle date selection from calendar"""
         self.entry_panel.set_date(selected_date)
+        self._update_detail_panel(selected_date)
         self.statusBar.showMessage(f"Datum ausgewählt: {selected_date.strftime('%d.%m.%Y')}", 3000)
 
     def on_entry_saved(self, saved_date: date):
         """Handle entry save"""
         self.calendar_widget.refresh_date(saved_date)
+        self._update_detail_panel(saved_date)
         self.update_entry_count()
         self.statusBar.showMessage("Eintrag gespeichert", 3000)
 
     def on_entry_deleted(self, deleted_date: date):
         """Handle entry deletion"""
         self.calendar_widget.refresh_date(deleted_date)
+        self._update_detail_panel(deleted_date)
         self.update_entry_count()
         self.statusBar.showMessage("Eintrag gelöscht", 3000)
 
