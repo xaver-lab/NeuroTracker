@@ -27,6 +27,14 @@ venv/
 # -------------------
 dist/
 build/
+*.spec
+
+# -------------------
+# Buildozer / Android
+# -------------------
+.buildozer/
+bin/
+main_desktop_backup.py
 
 # -------------------
 # Sensible Daten (NIEMALS ins Repo!)

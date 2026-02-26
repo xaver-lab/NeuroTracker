@@ -1,3 +1,9 @@
-kivy>=2.3.0
+# NeuroTracker – Android / KivyMD dependencies
+# Install these in your host environment for development and to run buildozer.
+
+kivy==2.3.0
 kivymd==1.2.0
+pillow>=10.0.0
+certifi
 buildozer>=1.5.0
+cython>=3.0.0
