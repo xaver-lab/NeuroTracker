@@ -90,12 +90,20 @@ class _ModuleToggleCard(MDCard):
             adaptive_height=False,
             padding=[dp(0), dp(10), dp(0), dp(0)],
         )
-        self.switch = MDSwitch(active=enabled)
+        self._initializing = True
+        self.switch = MDSwitch()
         self.switch.bind(active=self._on_switch_change)
+        def _set_active(dt):
+            self._initializing = True
+            self.switch.active = enabled
+            self._initializing = False
+        Clock.schedule_once(_set_active, 0)
         switch_container.add_widget(self.switch)
         self.add_widget(switch_container)
 
     def _on_switch_change(self, instance, value):
+        if self._initializing:
+            return
         if self._on_toggle:
             self._on_toggle(self.module_key, value)
 
@@ -197,7 +205,13 @@ class SettingsScreen(MDScreen):
         state_text = "aktiviert" if enabled else "deaktiviert"
         info = TRACKER_MODULES.get(module_key, {})
         label = info.get("label", module_key)
-        Snackbar(text=f"{info.get('icon', '')} {label} {state_text}").open()
+        snack = Snackbar()
+        snack.add_widget(MDLabel(
+            text=f"{info.get('icon', '')} {label} {state_text}",
+            theme_text_color="Custom",
+            text_color=(1, 1, 1, 1),
+        ))
+        snack.open()
 
     # ── Data Management ──────────────────────────────────────────────────────
 

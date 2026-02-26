@@ -1,8 +1,8 @@
 {
   "modules": {
-    "stress": true,
-    "fungal": true,
-    "sleep": true,
+    "stress": false,
+    "fungal": false,
+    "sleep": false,
     "weather": false,
     "sweating": false,
     "contact": false
