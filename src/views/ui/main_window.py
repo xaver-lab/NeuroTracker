@@ -24,10 +24,10 @@ from config import (
 from models.data_manager import DataManager
 from models.food_manager import FoodManager
 from models.settings_manager import SettingsManager
-from ui.styles import get_main_stylesheet
-from ui.calendar_widget import CalendarWidget
-from ui.entry_panel import EntryPanel
-from ui.statistics_dialog import StatisticsDialog
+from views.ui.styles import get_main_stylesheet
+from views.ui.calendar_widget import CalendarWidget
+from views.ui.entry_panel import EntryPanel
+from views.ui.statistics_dialog import StatisticsDialog
 from utils.google_drive import GoogleDriveSync
 from utils.export import ExportManager
 

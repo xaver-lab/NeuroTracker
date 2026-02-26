@@ -13,7 +13,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 
 import config
-from ui.main_window import MainWindow
+from views.ui.main_window import MainWindow
 
 
 def main():

@@ -43,10 +43,10 @@ else:
     Window.size = (400, 720)
 
 # ---------- Import screens before KV so classes are registered ----------
-from mobile_ui.entry_screen import EntryScreen  # noqa: F401
-from mobile_ui.calendar_screen import CalendarScreen  # noqa: F401
-from mobile_ui.stats_screen import StatsScreen  # noqa: F401
-from mobile_ui.settings_screen import SettingsScreen  # noqa: F401
+from views.mobile_ui.entry_screen import EntryScreen  # noqa: F401
+from views.mobile_ui.calendar_screen import CalendarScreen  # noqa: F401
+from views.mobile_ui.stats_screen import StatsScreen  # noqa: F401
+from views.mobile_ui.settings_screen import SettingsScreen  # noqa: F401
 
 # ---------- KV layout ----------
 KV = """

@@ -2,7 +2,7 @@
 UI Components for Neuro-Tracker Application
 """
 
-from ui.styles import (
+from views.ui.styles import (
     get_main_stylesheet,
     get_severity_button_style,
     get_day_card_style,
@@ -15,11 +15,11 @@ from ui.styles import (
     get_contrast_text_color
 )
 
-from ui.day_card import DayCard, EmptyDayCard
-from ui.calendar_widget import CalendarWidget
-from ui.entry_panel import EntryPanel
-from ui.statistics_dialog import StatisticsDialog, StatCard
-from ui.main_window import MainWindow
+from views.ui.day_card import DayCard, EmptyDayCard
+from views.ui.calendar_widget import CalendarWidget
+from views.ui.entry_panel import EntryPanel
+from views.ui.statistics_dialog import StatisticsDialog, StatCard
+from views.ui.main_window import MainWindow
 
 __all__ = [
     # Styles

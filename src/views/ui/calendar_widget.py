@@ -19,7 +19,7 @@ from config import (
 )
 from models.day_entry import DayEntry
 from models.data_manager import DataManager
-from ui.day_card import DayCard
+from views.ui.day_card import DayCard
 
 
 class CalendarWidget(QWidget):
