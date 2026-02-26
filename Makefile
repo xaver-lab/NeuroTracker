@@ -11,6 +11,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 PYINSTALLER_COMMON = --name "NeuroTracker" \
+	--paths src \
 	--hidden-import google.oauth2.credentials \
 	--hidden-import google_auth_oauthlib.flow \
 	--hidden-import google.auth.transport.requests \

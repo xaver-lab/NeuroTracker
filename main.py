@@ -3,6 +3,10 @@ Neuro-Tracker - Eczema and Food Tracking Application
 Main entry point for the application
 """
 import sys
+import os
+
+# Add src/ to path so packages (config, ui, models, utils) are found
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt

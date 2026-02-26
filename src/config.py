@@ -9,8 +9,8 @@ APP_NAME = "Neuro-Tracker"
 APP_VERSION = "1.0.0"
 APP_AUTHOR = "Xaver"
 
-# Paths
-BASE_DIR = Path(__file__).parent
+# Paths – config.py lives in src/, so go up one level to reach project root
+BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
 RESOURCES_DIR = BASE_DIR / "resources"
 ICONS_DIR = RESOURCES_DIR / "icons"

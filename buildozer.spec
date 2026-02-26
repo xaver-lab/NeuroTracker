@@ -39,12 +39,12 @@ fullscreen = 0
 # presplash.filename = resources/presplash.png
 
 # Include shared modules in APK
-source.include_patterns = main.py, models/*.py, utils/*.py, mobile_ui/*.py, config.py, data/.gitkeep
+source.include_patterns = main.py, src/models/*.py, src/utils/*.py, src/mobile_ui/*.py, src/config.py, data/.gitkeep
 
 # Exclude desktop-only files from APK
 # NOTE: main_android.py is copied to main.py by the Makefile before building.
 #       The desktop main.py is temporarily backed up and restored after the build.
-source.exclude_patterns = ui/*, main_android.py, build.md, Makefile, profile.md, umstellung.md, README.md, requirements*.txt, buildozer.spec, venv/*, dist/*, build/*, __pycache__/*, .git/*, .buildozer/*
+source.exclude_patterns = src/ui/*, main_android.py, build.md, Makefile, profile.md, umstellung.md, README.md, requirements*.txt, buildozer.spec, venv/*, dist/*, build/*, __pycache__/*, .git/*, .buildozer/*
 
 # python-for-android distribution
 p4a.branch = master

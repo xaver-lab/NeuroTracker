@@ -13,8 +13,8 @@ import os
 import sys
 from pathlib import Path
 
-# Ensure project root is on sys.path so shared modules resolve
-sys.path.insert(0, str(Path(__file__).parent))
+# Ensure src/ is on sys.path so shared modules resolve
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from kivy.core.window import Window
 from kivy.utils import platform
