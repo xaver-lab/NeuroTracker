@@ -1,240 +1,209 @@
 # Neuro-Tracker 🩺
 
-Eine Python Desktop-Anwendung zur Erfassung und Analyse von Neurodermitis-Verläufen mit Fokus auf Nahrungsmittel-Zusammenhänge.
+Eine Python-Anwendung zur Erfassung und Analyse von Neurodermitis-Verläufen mit Fokus auf Trigger-Erkennung — verfügbar als **Desktop-App (PyQt5)** und **Android-App (KivyMD)**.
 
-## 📋 Übersicht
+## Übersicht
 
-Neuro-Tracker hilft dir dabei, deinen Neurodermitis-Verlauf systematisch zu dokumentieren und mögliche Zusammenhänge mit der Ernährung zu identifizieren. Die Anwendung bietet eine intuitive Kalenderansicht, einfache Dateneingabe und aussagekräftige Statistiken.
+Neuro-Tracker hilft dir dabei, deinen Neurodermitis-Verlauf systematisch zu dokumentieren und mögliche Zusammenhänge mit Ernährung, Stress, Schlaf, Wetter und weiteren Faktoren zu identifizieren. Beide Versionen teilen sich dasselbe Daten-Backend und können über Google Drive synchronisiert werden.
 
-## ✨ Hauptfunktionen
+## Hauptfunktionen
 
-### Datenerfassung
-- **Täglicher Schweregrad**: Bewertung von 1-5 für den allgemeinen Hautzustand
-- **Notizfeld Schweregrad**: Optionale Notizen direkt unter der Schweregrad-Auswahl
-- **Lebensmittel-Tracking**: Fixe Auswahl aus vordefinierten Lebensmitteln (Checkboxen)
-- **Notizfeld Nahrung**: Optionale Notizen direkt unter der Lebensmittel-Auswahl
-- **Schnelle Bearbeitung**: Jeder Tag kann durch Anklicken bearbeitet werden
-- **Detail-Ansicht**: Doppelklick auf einen Tag zeigt alle Details in einem erweiterten Fenster
+### Tägliche Datenerfassung
+- **Schweregrad**: Bewertung von 1-5 mit Farbcodierung (grün bis rot)
+- **Lebensmittel-Tracking**: Auswahl aus 50+ vordefinierten Lebensmitteln mit Emoji-Icons
+- **Notizfelder**: Separate Notizen für Hautzustand und Nahrung
+- **Schnelle Bearbeitung**: Jeden Tag im Kalender anklicken und bearbeiten
+
+### Modulares Trigger-System
+Individuell aktivierbare Module zur Erfassung zusätzlicher Trigger:
+
+| Modul | Beschreibung | Standard |
+|-------|-------------|----------|
+| Stresslevel | Skala 1-5 | Aktiviert |
+| Zehenpilz (Mykose) | Ja/Nein — Id-Reaktion tracken | Aktiviert |
+| Schlafqualität | Skala 1-5 (invertiert: 5 = am besten) | Aktiviert |
+| Wetter / Umgebung | 6 Kategorien (Normal, Trocken, Feucht, etc.) | Aktiviert |
+| Schwitzen | Ja/Nein | Deaktiviert |
+| Kontaktexposition | Nickel, Latex, Desinfektionsmittel, etc. | Deaktiviert |
 
 ### Benutzeroberfläche
-- **Wochenansicht**: Übersichtliche Darstellung von 2 Wochen (aktuelle + letzte Woche)
-- **Navigation**: Einfaches Blättern durch vergangene Wochen
-- **Eingabe-Panel**: Permanente linke Spalte für schnelle Einträge
-  - Standardmäßig vorausgewählt: Aktueller Tag
-  - Andere Tage auswählbar
-  - Speichern-Button für jeden Eintrag
 
-### Analyse & Export
-- **Statistiken**: Graphische Darstellung von Durchschnittswerten und Trends
-- **Muster-Erkennung**: Automatische Erkennung von Zusammenhängen zwischen Ernährung und Symptomen
-- **Export-Funktion**: Daten als CSV/PDF für Arztbesuche exportieren
+**Desktop (PyQt5)**:
+- 2-Wochen-Kalenderansicht (aktuelle + letzte Woche)
+- Permanentes Eingabe-Panel als linke Seitenleiste mit Tabs (Hautzustand, Lebensmittel, Trigger)
+- Menüleiste mit Datei, Bearbeiten, Ansicht, Statistiken, Hilfe
+- Statusleiste mit Sync-Status und Durchschnittswerten
 
-### Muster-Erkennung (NEU)
-Die Muster-Erkennung analysiert automatisch, ob bestimmte Lebensmittel mit einer Verschlechterung des Hautzustands in den folgenden Tagen zusammenhängen:
+**Android (KivyMD)**:
+- Material Design 3 mit Bottom-Navigation (Heute, Kalender, Statistiken, Einstellungen)
+- Kategorisierte Lebensmittel-Auswahl (Milch, Gemüse, Obst, Getreide, Proteine, Nüsse, Sonstiges)
+- Expandierbare Sheets mit Suchfunktion
 
-- **Zeitfenster einstellbar**: 1-5 Tage nach Verzehr (Standard: 2 Tage)
-- **Schwellenwert konfigurierbar**: Ab welcher Schwere gilt ein Tag als "schlecht" (Standard: 4)
-- **Wahrscheinlichkeitsberechnung**:
-  - Die App zählt, wie oft nach dem Verzehr eines Lebensmittels ein schlechter Tag folgte
-  - Beispiel: Milch wurde 10x gegessen, 6x folgte innerhalb von 2 Tagen ein schlechter Tag = 60% Wahrscheinlichkeit
-- **Farbcodierung**:
-  - Rot (>50%): Hohe Wahrscheinlichkeit - möglicher Trigger
-  - Orange (25-50%): Mittlere Wahrscheinlichkeit - beobachten
-  - Grün (<25%): Geringe Wahrscheinlichkeit - vermutlich verträglich
+### Muster-Erkennung & Statistiken
+Die App analysiert automatisch Zusammenhänge zwischen Triggern und Hautzustand:
 
-### Synchronisation
-- **Google Drive Integration**: Automatische Synchronisation zwischen mehreren PCs
-- **Offline-Fähig**: Arbeiten auch ohne Internetverbindung möglich
-- **Automatisches Backup**: Regelmäßige Sicherung deiner Daten
+- **Wahrscheinlichkeitsberechnung**: Wie oft folgt auf ein Lebensmittel ein schlechter Tag?
+- **Farbcodierung**: Rot (>50% — Trigger), Orange (25-50% — beobachten), Grün (<25% — verträglich)
+- **Zeitfenster**: Einstellbar 1-5 Tage nach Verzehr
+- **Weitere Metriken**: Durchschnittswerte, Trends, Streaks, Wochentag-Muster, Stress-/Schlaf-/Wetter-Korrelationen
 
-## 🏗️ Projektstruktur
+### Synchronisation & Export
+- **Google Drive**: Automatische Synchronisation alle 5 Minuten + bei jedem Speichern
+- **Offline-fähig**: Arbeitet vollständig ohne Internet, synchronisiert bei Reconnect
+- **Konfliktauflösung**: Server-Timestamp (UTC) hat Vorrang
+- **Export**: CSV (Semikolon-getrennt) und PDF für Arztbesuche
+
+## Projektstruktur
 
 ```
 NeuroTracker/
-├── README.md                    # Diese Datei
-├── requirements.txt             # Python-Dependencies
-├── main.py                      # Einstiegspunkt der Anwendung
-├── config.py                    # Konfiguration (Pfade, Einstellungen)
-├── build.md                     # Build-Anleitung und Dokumentation
-├── credentials.json             # Google API Credentials (nicht committen!)
-├── .gitignore                   # Git Ignore-Regeln
+├── main.py                      # Desktop-Einstiegspunkt (PyQt5)
+├── main_android.py              # Android-Einstiegspunkt (KivyMD)
+├── config.py                    # Zentrale Konfiguration
+├── buildozer.spec               # Android-Build-Konfiguration
+├── requirements.txt             # Desktop-Dependencies
+├── requirements_android.txt     # Android-Dependencies
 │
-├── data/                        # Lokale Datenspeicherung
-│   ├── entries.json             # Tägliche Einträge
-│   ├── food_suggestions.json    # Lebensmittel-Vorschläge
-│   ├── sync_status.json         # Status der Google Drive Synchronisation
-│   └── token.json               # OAuth Token für Google Drive
-│
-├── ui/                          # User Interface Komponenten
-│   ├── __init__.py
+├── ui/                          # Desktop-UI (PyQt5)
 │   ├── main_window.py           # Hauptfenster & Layout
-│   ├── calendar_widget.py       # Wochen-Kalender-Ansicht
+│   ├── calendar_widget.py       # 2-Wochen-Kalender
 │   ├── entry_panel.py           # Eingabe-Panel (linke Spalte)
 │   ├── day_card.py              # Einzelner Tag im Kalender
 │   ├── statistics_dialog.py     # Statistik-Fenster
-│   └── styles.py                # QSS Styling (Design)
+│   └── styles.py                # QSS Styling
 │
-├── models/                      # Datenmodelle & Logik
-│   ├── __init__.py
-│   ├── day_entry.py             # Datenmodell für einen Tag
-│   ├── data_manager.py          # Speichern/Laden von Daten
-│   └── food_manager.py          # Verwaltung von Lebensmitteln
+├── mobile_ui/                   # Android-UI (KivyMD)
+│   ├── entry_screen.py          # Tageseintrag-Screen
+│   ├── calendar_screen.py       # Monatskalender
+│   ├── stats_screen.py          # Statistiken & Muster
+│   ├── day_detail_screen.py     # Tagesdetail-Ansicht
+│   └── settings_screen.py       # Modul-Einstellungen
 │
-├── utils/                       # Hilfsfunktionen
-│   ├── __init__.py
+├── models/                      # Datenmodelle (geteilt)
+│   ├── day_entry.py             # DayEntry-Klasse
+│   ├── data_manager.py          # JSON-Persistenz
+│   ├── food_manager.py          # Lebensmittel-Verwaltung
+│   └── settings_manager.py      # Modul-Einstellungen
+│
+├── utils/                       # Business-Logik (geteilt)
+│   ├── statistics.py            # Trigger-Analyse-Engine
 │   ├── google_drive.py          # Google Drive Synchronisation
-│   ├── statistics.py            # Statistik-Berechnungen
-│   ├── export.py                # Export zu CSV/PDF
+│   ├── export.py                # CSV/PDF-Export
 │   └── validators.py            # Eingabe-Validierung
+│
+└── data/                        # Lokale Datenspeicherung
+    ├── entries.json             # Tägliche Einträge
+    ├── food_suggestions.json    # Lebensmittel-Vorschläge
+    └── settings.json            # Modul-Konfiguration
 ```
 
-## 🚀 Installation
+## Installation
 
-### Voraussetzungen
-- Python 3.8 oder höher
-- pip (Python Package Manager)
+### Desktop (PyQt5)
 
-### Schritt-für-Schritt Anleitung
+**Voraussetzungen:** Python 3.8+
 
-1. **Repository klonen**
-   ```bash
-   git clone https://github.com/your-username/Neuro-Tracker.git
-   cd Neuro-Tracker
-   ```
+```bash
+git clone https://github.com/xaver-lab/Neuro-Tracker.git
+cd Neuro-Tracker
 
-2. **Virtual Environment erstellen** (empfohlen)
-   ```bash
-   python -m venv venv
+python -m venv venv
+source venv/bin/activate   # Linux/Mac
+# venv\Scripts\activate    # Windows
 
-   # Windows
-   venv\Scripts\activate
+pip install -r requirements.txt
+python main.py
+```
 
-   # Linux/Mac
-   source venv/bin/activate
-   ```
+**Google Drive einrichten** (optional):
+1. Google Cloud Projekt erstellen und Drive API aktivieren
+2. Credentials herunterladen als `credentials.json` im Projektordner
 
-3. **Dependencies installieren**
-   ```bash
-   pip install -r requirements.txt
-   ```
+### Android (KivyMD)
 
-4. **Google Drive Synchronisation einrichten** (optional)
-   - Google Cloud Projekt erstellen
-   - Drive API aktivieren
-   - Credentials herunterladen und als `credentials.json` im Projektordner speichern
+**Voraussetzungen:** Python 3.8+, Java JDK 11+, Android SDK (API 33), Android NDK 25b
 
-5. **Anwendung starten**
-   ```bash
-   python main.py
-   ```
+```bash
+pip install -r requirements_android.txt
+buildozer android debug
+```
 
-## 🔧 Technologie-Stack
+Die APK befindet sich danach in `bin/`. Auf ein Android-Gerät (7.0+) übertragen und installieren.
 
-- **GUI Framework**: PyQt5 (moderne, plattformübergreifende Desktop-UI)
-- **Datenformat**: JSON (einfach, lesbar, portabel)
-- **Charts**: matplotlib / pyqtgraph (für Statistiken)
-- **Google Drive**: google-api-python-client (Synchronisation)
-- **Export**: reportlab (PDF) / pandas (CSV)
+## Technologie-Stack
 
-## 📊 Datenmodell
+| Komponente | Desktop | Android |
+|-----------|---------|---------|
+| GUI | PyQt5 5.15.10+ | KivyMD 1.2.0 (Material Design 3) |
+| Build | PyInstaller | Buildozer 1.5.0+ |
+| Datenformat | JSON | JSON |
+| Charts | matplotlib / pyqtgraph | — |
+| Cloud-Sync | Google Drive API | Google Drive API |
+| PDF-Export | reportlab 4.0.7+ | — |
+
+## Datenmodell
 
 ### Tag-Eintrag (DayEntry)
 ```python
 {
     "date": "2026-01-22",
-    "severity": 3,                    # Schweregrad 1-5
-    "foods": ["Tomaten", "Milch"],    # Liste von Lebensmitteln
-    "notes": "Viel Stress heute",     # Optional
+    "severity": 3,                           # Schweregrad 1-5
+    "foods": ["Tomaten", "Milch"],           # Lebensmittel
+    "notes": "Viel Stress heute",            # Allgemeine Notizen
+    "skin_notes": "Risse an Fingern",        # Haut-spezifisch
+    "food_notes": "Großer Salat mittags",    # Nahrungs-spezifisch
+    "stress_level": 4,                       # Trigger: Stress 1-5
+    "fungal_active": true,                   # Trigger: Mykose aktiv
+    "sleep_quality": 2,                      # Trigger: Schlaf 1-5
+    "weather": "Trocken / Heizungsluft",     # Trigger: Wetter
+    "sweating": false,                       # Trigger: Schwitzen
+    "contact_exposures": ["Nickel"],         # Trigger: Kontakt
     "created_at": "2026-01-22T10:30:00",
     "updated_at": "2026-01-22T10:30:00"
 }
 ```
 
-## 🎯 Geplante Features (Roadmap)
+## Roadmap
 
-- [x] **v1.0 - Grundfunktionen**
-  - [x] Projektstruktur
-  - [x] Kalenderansicht mit 2 Wochen
-  - [x] Eingabe-Panel für neue Einträge
-  - [x] Daten lokal speichern (JSON)
-  - [x] Bearbeiten bestehender Einträge
+- [x] **v1.0** — Kalenderansicht, Eingabe-Panel, lokale JSON-Speicherung
+- [x] **v1.1** — Google Drive Synchronisation, automatisches Backup
+- [x] **v1.2** — Statistiken, Muster-Erkennung, Trigger-Wahrscheinlichkeiten, modulares Trigger-System
+- [x] **v1.2-android** — Android-App mit KivyMD, kategorisierte Lebensmittel, Settings-Screen
+- [ ] **v1.3** — CSV/PDF-Export verfeinern, interaktive Charts, Dark Mode, Mehrsprachigkeit (DE/EN)
+- [ ] **v2.0** — Mehrere Körperstellen tracken, Kontakt-Allergen-Historie, Medikamenten-Tracking
 
-- [x] **v1.1 - Synchronisation**
-  - [x] Google Drive Integration
-  - [x] Automatisches Backup
-  - [ ] Konflikt-Auflösung bei mehreren PCs
-
-- [x] **v1.2 - Analyse**
-  - [x] Basis-Statistiken (Durchschnittswerte, Trends)
-  - [x] Korrelation Essen ↔ Schweregrad
-  - [x] Muster-Erkennung mit Zeitfenster
-  - [x] Wahrscheinlichkeitsberechnung für Trigger
-
-- [ ] **v1.3 - Erweiterte Features**
-  - [ ] Export zu CSV/PDF
-  - [ ] Interaktive Charts
-  - [ ] Dunkler Modus (Dark Mode)
-  - [ ] Mehrsprachigkeit (DE/EN)
-
-- [ ] **v2.0 - Advanced**
-  - [ ] Lebensmittel-Kategorien
-  - [ ] Mehrere Körperstellen tracken
-
-## 🤝 Mitwirken
-
-Contributions sind willkommen! Wenn du Ideen oder Verbesserungsvorschläge hast:
-
-1. Fork das Repository
-2. Erstelle einen Feature-Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit deine Änderungen (`git commit -m 'Add some AmazingFeature'`)
-4. Push zum Branch (`git push origin feature/AmazingFeature`)
-5. Öffne einen Pull Request
-
-## 📝 Lizenz
-
-Dieses Projekt ist unter der MIT-Lizenz veröffentlicht - siehe [LICENSE](LICENSE) für Details.
-
-## 💡 Verwendung
+## Verwendung
 
 ### Ersten Eintrag erstellen
-1. Starte die Anwendung
-2. Das Eingabe-Panel links zeigt automatisch den heutigen Tag
-3. Wähle den Schweregrad (1-5) und füge optional Notizen hinzu
-4. Wähle die gegessenen Lebensmittel aus den Checkboxen
-5. Optional: Notizen zur Nahrung hinzufügen
-6. Klicke auf "Speichern"
-
-### Vergangene Tage bearbeiten
-1. Klicke auf einen Tag im Kalender
-2. Der Tag wird ins Eingabe-Panel geladen
-3. Nimm deine Änderungen vor
-4. Klicke auf "Speichern"
-
-### Tagesdetails ansehen
-1. Doppelklicke auf einen Tag im Kalender
-2. Ein Detail-Fenster zeigt alle Informationen des Tages
+1. Starte die Anwendung (`python main.py` oder Android-App)
+2. Wähle den Schweregrad (1-5) und füge optional Notizen hinzu
+3. Wähle die gegessenen Lebensmittel aus
+4. Erfasse weitere Trigger (Stress, Schlaf, etc.) im Trigger-Tab
+5. Klicke auf "Speichern"
 
 ### Muster-Erkennung nutzen
-1. Klicke auf den "Statistiken"-Button in der Toolbar
-2. Wechsle zum Tab "Muster-Erkennung"
-3. Stelle das Zeitfenster ein (wie viele Tage nach Verzehr soll geprüft werden)
-4. Stelle den Schwellenwert ein (ab welcher Schwere gilt ein Tag als schlecht)
-5. Die Tabelle zeigt alle erkannten Muster mit Wahrscheinlichkeiten
+1. Öffne die Statistiken (Desktop: Toolbar-Button, Android: Tab "Statistiken")
+2. Stelle das Zeitfenster ein (Tage nach Verzehr) und den Schwellenwert
+3. Die Tabelle zeigt erkannte Muster mit Wahrscheinlichkeiten und Farbcodierung
 
-## 🐛 Bekannte Probleme & FAQ
+## FAQ
 
-**Q: Wie oft wird mit Google Drive synchronisiert?**
-A: Automatisch bei jedem Speichern + alle 5 Minuten im Hintergrund.
+**Wie oft wird mit Google Drive synchronisiert?**
+Automatisch bei jedem Speichern + alle 5 Minuten im Hintergrund.
 
-**Q: Kann ich die App ohne Google Drive nutzen?**
-A: Ja! Die App funktioniert vollständig offline mit lokaler Speicherung.
+**Kann ich die App ohne Google Drive nutzen?**
+Ja, die App funktioniert vollständig offline mit lokaler Speicherung.
 
-**Q: Sind meine Daten sicher?**
-A: Alle Daten werden nur lokal und in deinem persönlichen Google Drive gespeichert. Keine Cloud-Server.
+**Sind meine Daten sicher?**
+Alle Daten werden nur lokal und in deinem persönlichen Google Drive gespeichert. Keine externen Cloud-Server.
 
-## 📧 Kontakt
+## Mitwirken
 
-Bei Fragen oder Problemen erstelle bitte ein [Issue](https://github.com/your-username/Neuro-Tracker/issues).
+Contributions sind willkommen! Fork das Repository, erstelle einen Feature-Branch und öffne einen Pull Request.
+
+## Lizenz
+
+Dieses Projekt ist unter der MIT-Lizenz veröffentlicht — siehe [LICENSE](LICENSE) für Details.
 
 ---
 
