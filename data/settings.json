@@ -1,7 +1,7 @@
 {
   "modules": {
-    "stress": false,
-    "fungal": false,
+    "stress": true,
+    "fungal": true,
     "sleep": true,
     "weather": false,
     "sweating": false,
