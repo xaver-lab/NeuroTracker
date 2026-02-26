@@ -1,6 +1,12 @@
 """
 NeuroTracker Android – KivyMD 1.2.0 Entry Point
 Shares models/ and utils/ with the PyQt5 desktop version.
+
+Redesigned mobile UI with 4 clean tabs:
+- Heute (Entry) – Daily symptom & food logging
+- Kalender (Calendar) – Monthly overview
+- Statistiken (Stats) – Analysis & patterns
+- Einstellungen (Settings) – Module toggles & app info
 """
 
 import os
@@ -40,6 +46,7 @@ else:
 from mobile_ui.entry_screen import EntryScreen  # noqa: F401
 from mobile_ui.calendar_screen import CalendarScreen  # noqa: F401
 from mobile_ui.stats_screen import StatsScreen  # noqa: F401
+from mobile_ui.settings_screen import SettingsScreen  # noqa: F401
 
 # ---------- KV layout ----------
 KV = """
@@ -48,14 +55,14 @@ MDBoxLayout:
 
     MDBottomNavigation:
         id: bottom_nav
-        panel_color: app.theme_cls.bg_dark
-        selected_color_background: app.theme_cls.primary_light
-        text_color_active: app.theme_cls.primary_color
+        panel_color: 1, 1, 1, 1
+        selected_color_background: 0.09, 0.46, 0.82, 0.08
+        text_color_active: 0.09, 0.46, 0.82, 1
 
         MDBottomNavigationItem:
             name: "entry"
             text: "Heute"
-            icon: "pencil"
+            icon: "pencil-outline"
             on_tab_press: app.on_tab_switch("entry")
 
             EntryScreen:
@@ -64,7 +71,7 @@ MDBoxLayout:
         MDBottomNavigationItem:
             name: "calendar"
             text: "Kalender"
-            icon: "calendar-month"
+            icon: "calendar-month-outline"
             on_tab_press: app.on_tab_switch("calendar")
 
             CalendarScreen:
@@ -78,6 +85,15 @@ MDBoxLayout:
 
             StatsScreen:
                 id: stats_screen
+
+        MDBottomNavigationItem:
+            name: "settings"
+            text: "Einstellungen"
+            icon: "cog-outline"
+            on_tab_press: app.on_tab_switch("settings")
+
+            SettingsScreen:
+                id: settings_screen
 """
 
 
@@ -112,6 +128,8 @@ class NeuroTrackerApp(MDApp):
             root.ids.calendar_screen.on_enter_screen()
         elif tab_name == "stats" and hasattr(root.ids, "stats_screen"):
             root.ids.stats_screen.on_enter_screen()
+        elif tab_name == "settings" and hasattr(root.ids, "settings_screen"):
+            root.ids.settings_screen.on_enter_screen()
 
 
 if __name__ == "__main__":
