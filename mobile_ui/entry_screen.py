@@ -1,6 +1,6 @@
 """
 Entry Screen – daily symptom & food logging (KivyMD 1.2.0).
-Replaces ui/entry_panel.py.
+Redesigned with categorized food selection, search, and clean section cards.
 """
 
 from datetime import date, timedelta
@@ -16,8 +16,9 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.button import MDRaisedButton, MDFlatButton, MDIconButton
 from kivymd.uix.chip import MDChip
 from kivymd.uix.textfield import MDTextField
-from kivymd.uix.card import MDSeparator
+from kivymd.uix.card import MDCard, MDSeparator
 from kivymd.uix.snackbar import Snackbar
+from kivymd.uix.expansionpanel import MDExpansionPanel, MDExpansionPanelOneLine
 
 from config import (
     SEVERITY_COLORS, MIN_SEVERITY, MAX_SEVERITY,
@@ -28,12 +29,90 @@ from models.day_entry import DayEntry
 
 
 def _hex_to_rgba(hex_color: str) -> list:
-    """Convert hex color string to RGBA list (0-1 range)."""
     hex_color = hex_color.lstrip("#")
     r = int(hex_color[0:2], 16) / 255
     g = int(hex_color[2:4], 16) / 255
     b = int(hex_color[4:6], 16) / 255
     return [r, g, b, 1]
+
+
+# ── Food categories for organized selection ──────────────────────────────────
+
+FOOD_CATEGORIES = {
+    "Milchprodukte": ["Milch", "Käse", "Joghurt", "Butter", "Sahne", "Quark"],
+    "Gemüse": ["Tomaten", "Paprika", "Gurken", "Karotten", "Brokkoli", "Spinat",
+               "Zwiebeln", "Knoblauch", "Salat", "Zucchini"],
+    "Obst": ["Äpfel", "Bananen", "Orangen", "Erdbeeren", "Weintrauben", "Kiwi",
+             "Ananas", "Mango", "Birnen", "Pfirsiche"],
+    "Getreide": ["Weizen", "Haferflocken", "Reis", "Nudeln", "Brot", "Müsli"],
+    "Protein": ["Hähnchen", "Rind", "Schwein", "Fisch", "Eier", "Tofu"],
+    "Nüsse & Samen": ["Erdnüsse", "Mandeln", "Walnüsse", "Haselnüsse", "Sonnenblumenkerne"],
+    "Sonstiges": ["Schokolade", "Kaffee", "Tee", "Alkohol", "Zucker", "Honig"],
+}
+
+CATEGORY_ICONS = {
+    "Milchprodukte": "🥛",
+    "Gemüse": "🥬",
+    "Obst": "🍎",
+    "Getreide": "🌾",
+    "Protein": "🥩",
+    "Nüsse & Samen": "🥜",
+    "Sonstiges": "☕",
+}
+
+
+class _SectionCard(MDCard):
+    """A styled card that wraps a section of the entry form."""
+
+    def __init__(self, **kwargs):
+        super().__init__(
+            orientation="vertical",
+            size_hint=(1, None),
+            adaptive_height=True,
+            padding=[dp(16), dp(12), dp(16), dp(12)],
+            radius=[dp(12)],
+            elevation=1,
+            md_bg_color=_hex_to_rgba("#FFFFFF"),
+            **kwargs,
+        )
+
+
+class _FoodCategoryContent(MDBoxLayout):
+    """Content for a food category expansion panel."""
+
+    def __init__(self, foods: list, food_chips_ref: dict, selected_foods: set,
+                 toggle_callback, **kwargs):
+        super().__init__(
+            orientation="vertical",
+            adaptive_height=True,
+            spacing=dp(4),
+            padding=[dp(0), dp(4), dp(0), dp(8)],
+            **kwargs,
+        )
+        row = None
+        for idx, food in enumerate(foods):
+            if idx % 3 == 0:
+                row = MDBoxLayout(
+                    orientation="horizontal",
+                    adaptive_height=True,
+                    spacing=dp(4),
+                )
+                self.add_widget(row)
+            emoji = FOOD_EMOJIS.get(food, "")
+            is_nickel = food in NICKEL_RICH_FOODS
+            label = f"{emoji} {food}"
+            if is_nickel:
+                label += " [Ni]"
+
+            is_active = food in selected_foods
+            chip = MDChip(
+                text=label,
+                type="filter",
+                active=is_active,
+                on_active=lambda inst, val, f=food: toggle_callback(f, val),
+            )
+            food_chips_ref[food] = chip
+            row.add_widget(chip)
 
 
 class EntryScreen(MDScreen):
@@ -58,9 +137,13 @@ class EntryScreen(MDScreen):
         self.weather_chips: dict = {}
         self.contact_chips: dict = {}
 
+        self._food_search_text: str = ""
+        self._food_category_panels = {}
+        self._food_all_chips_container = None
+
         Clock.schedule_once(self._build_ui, 0)
 
-    # ── Build UI ────────────────────────────────────────────────────────────────
+    # ── Build UI ─────────────────────────────────────────────────────────────
 
     def _build_ui(self, *_):
         from kivymd.app import MDApp
@@ -71,24 +154,34 @@ class EntryScreen(MDScreen):
 
         root = MDBoxLayout(orientation="vertical")
 
-        # ── Top bar: date navigation ────────────────────────────────────────────
+        # ── Top bar: date navigation ─────────────────────────────────────────
         top_bar = MDBoxLayout(
             orientation="horizontal",
             adaptive_height=True,
-            padding=[dp(8), dp(8), dp(8), dp(0)],
-            spacing=dp(4),
+            padding=[dp(4), dp(8), dp(4), dp(0)],
+            spacing=dp(0),
         )
         prev_btn = MDIconButton(
             icon="chevron-left",
             on_release=lambda *_: self._change_day(-1),
+            theme_text_color="Custom",
+            text_color=_hex_to_rgba("#424242"),
         )
         next_btn = MDIconButton(
             icon="chevron-right",
             on_release=lambda *_: self._change_day(1),
+            theme_text_color="Custom",
+            text_color=_hex_to_rgba("#424242"),
+        )
+        today_btn = MDIconButton(
+            icon="calendar-today",
+            on_release=lambda *_: self._go_today(),
+            theme_text_color="Custom",
+            text_color=_hex_to_rgba("#1565C0"),
         )
         date_col = MDBoxLayout(orientation="vertical", adaptive_height=True, size_hint_x=1)
         self.date_label = MDLabel(
-            text="", halign="center", font_style="H6", adaptive_height=True,
+            text="", halign="center", font_style="H6", bold=True, adaptive_height=True,
         )
         self.weekday_label = MDLabel(
             text="", halign="center",
@@ -100,42 +193,42 @@ class EntryScreen(MDScreen):
 
         top_bar.add_widget(prev_btn)
         top_bar.add_widget(date_col)
+        top_bar.add_widget(today_btn)
         top_bar.add_widget(next_btn)
         root.add_widget(top_bar)
 
-        # ── Scrollable content ──────────────────────────────────────────────────
+        # ── Scrollable content ───────────────────────────────────────────────
         scroll = ScrollView()
         self.content = MDBoxLayout(
             orientation="vertical",
             adaptive_height=True,
-            padding=[dp(16), dp(8), dp(16), dp(16)],
-            spacing=dp(12),
+            padding=[dp(12), dp(8), dp(12), dp(16)],
+            spacing=dp(10),
         )
 
         self._build_severity_section()
-        self.content.add_widget(MDSeparator(height=dp(1)))
         self._build_food_section()
-        self.content.add_widget(MDSeparator(height=dp(1)))
         self._build_trigger_sections()
         self._build_notes_section()
 
         scroll.add_widget(self.content)
         root.add_widget(scroll)
 
-        # ── Action bar ──────────────────────────────────────────────────────────
+        # ── Action bar ───────────────────────────────────────────────────────
         action_bar = MDBoxLayout(
             orientation="horizontal",
             adaptive_height=True,
-            padding=[dp(16), dp(8), dp(16), dp(8)],
+            padding=[dp(12), dp(8), dp(12), dp(8)],
             spacing=dp(12),
         )
         save_btn = MDRaisedButton(
-            text="Speichern",
+            text="  Speichern  ",
             md_bg_color=_hex_to_rgba("#4CAF50"),
             on_release=lambda *_: self.save_entry(),
         )
         self.delete_btn = MDFlatButton(
             text="Löschen",
+            theme_text_color="Custom",
             text_color=_hex_to_rgba("#F44336"),
             on_release=lambda *_: self.delete_entry(),
         )
@@ -143,32 +236,44 @@ class EntryScreen(MDScreen):
         self.delete_btn.disabled = True
 
         action_bar.add_widget(save_btn)
+        action_bar.add_widget(MDBoxLayout(size_hint_x=1))  # spacer
         action_bar.add_widget(self.delete_btn)
         root.add_widget(action_bar)
 
         self.add_widget(root)
         self._load_date(self.current_date)
 
-    # ── Severity section ────────────────────────────────────────────────────────
+    # ── Severity section ─────────────────────────────────────────────────────
 
     def _build_severity_section(self):
-        self.content.add_widget(
-            MDLabel(text="Hautzustand", font_style="Subtitle1", bold=True, adaptive_height=True)
+        card = _SectionCard()
+
+        card.add_widget(MDLabel(
+            text="Hautzustand",
+            font_style="Subtitle1",
+            bold=True,
+            adaptive_height=True,
+        ))
+
+        row = MDBoxLayout(
+            orientation="horizontal",
+            adaptive_height=True,
+            spacing=dp(8),
+            padding=[dp(0), dp(8), dp(0), dp(4)],
         )
-        row = MDBoxLayout(orientation="horizontal", adaptive_height=True, spacing=dp(8))
         self.severity_buttons = []
         for i in range(1, 6):
             btn = MDRaisedButton(
                 text=str(i),
-                size_hint=(None, None),
-                size=(dp(52), dp(52)),
-                md_bg_color=_hex_to_rgba("#E0E0E0"),
+                size_hint=(1, None),
+                height=dp(48),
+                md_bg_color=_hex_to_rgba("#F5F5F5"),
                 on_release=lambda _, s=i: self._set_severity(s),
             )
             btn._sev_value = i
             self.severity_buttons.append(btn)
             row.add_widget(btn)
-        self.content.add_widget(row)
+        card.add_widget(row)
 
         self.severity_desc = MDLabel(
             text="1 = sehr gut  —  5 = sehr schlecht",
@@ -176,7 +281,9 @@ class EntryScreen(MDScreen):
             font_style="Caption",
             adaptive_height=True,
         )
-        self.content.add_widget(self.severity_desc)
+        card.add_widget(self.severity_desc)
+
+        self.content.add_widget(card)
 
     def _set_severity(self, level: int):
         self.current_severity = level
@@ -198,127 +305,315 @@ class EntryScreen(MDScreen):
                 btn.md_bg_color = _hex_to_rgba(color_hex)
                 btn.text_color = [1, 1, 1, 1]
             else:
-                btn.md_bg_color = _hex_to_rgba("#E0E0E0")
+                btn.md_bg_color = _hex_to_rgba("#F5F5F5")
                 btn.text_color = _hex_to_rgba(color_hex)
 
-    # ── Food section ────────────────────────────────────────────────────────────
+    # ── Food section (categorized with search) ───────────────────────────────
 
     def _build_food_section(self):
-        self.content.add_widget(
-            MDLabel(text="Lebensmittel", font_style="Subtitle1", bold=True, adaptive_height=True)
-        )
-        food_flow = MDBoxLayout(
-            orientation="vertical", adaptive_height=True, spacing=dp(4),
-        )
-        foods = self.food_manager.get_all_suggestions()
-        row = None
-        for idx, food in enumerate(foods):
-            if idx % 3 == 0:
-                row = MDBoxLayout(orientation="horizontal", adaptive_height=True, spacing=dp(4))
-                food_flow.add_widget(row)
-            emoji = FOOD_EMOJIS.get(food, "")
-            is_nickel = food in NICKEL_RICH_FOODS
-            label = f"{emoji} {food}" + (" [Ni]" if is_nickel else "")
+        card = _SectionCard()
 
-            chip = MDChip(
-                text=label,
-                type="filter",
-                active=False,
-                on_active=lambda inst, val, f=food: self._toggle_food(f, val),
+        # Header with count
+        header = MDBoxLayout(
+            orientation="horizontal",
+            adaptive_height=True,
+        )
+        header.add_widget(MDLabel(
+            text="Lebensmittel",
+            font_style="Subtitle1",
+            bold=True,
+            adaptive_height=True,
+        ))
+        self.food_count_label = MDLabel(
+            text="0 ausgewählt",
+            font_style="Caption",
+            theme_text_color="Secondary",
+            halign="right",
+            adaptive_height=True,
+        )
+        header.add_widget(self.food_count_label)
+        card.add_widget(header)
+
+        # Search field
+        self.food_search = MDTextField(
+            hint_text="Lebensmittel suchen...",
+            mode="round",
+            size_hint_y=None,
+            height=dp(44),
+            icon_left="magnify",
+        )
+        self.food_search.bind(text=self._on_food_search)
+        card.add_widget(self.food_search)
+
+        # Selected foods display
+        self.selected_foods_row = MDBoxLayout(
+            orientation="horizontal",
+            adaptive_height=True,
+            spacing=dp(4),
+            padding=[dp(0), dp(4), dp(0), dp(0)],
+        )
+        card.add_widget(self.selected_foods_row)
+
+        # Food categories container
+        self.food_categories_container = MDBoxLayout(
+            orientation="vertical",
+            adaptive_height=True,
+            spacing=dp(4),
+            padding=[dp(0), dp(4), dp(0), dp(0)],
+        )
+        self._build_food_categories()
+        card.add_widget(self.food_categories_container)
+
+        self.content.add_widget(card)
+
+    def _build_food_categories(self):
+        """Build categorized food selection with expansion panels."""
+        self.food_categories_container.clear_widgets()
+        self.food_chips.clear()
+        self._food_category_panels.clear()
+
+        # Get foods from food_manager that might not be in categories
+        all_known_foods = set()
+        for foods_list in FOOD_CATEGORIES.values():
+            all_known_foods.update(foods_list)
+
+        manager_foods = set(self.food_manager.get_all_suggestions())
+        extra_foods = manager_foods - all_known_foods
+
+        # Build each category
+        for cat_name, foods in FOOD_CATEGORIES.items():
+            # Filter foods by search
+            visible_foods = self._filter_foods(foods)
+            if not visible_foods and self._food_search_text:
+                continue
+
+            icon = CATEGORY_ICONS.get(cat_name, "")
+            panel_content = _FoodCategoryContent(
+                foods=visible_foods if visible_foods else foods,
+                food_chips_ref=self.food_chips,
+                selected_foods=self.selected_foods,
+                toggle_callback=self._toggle_food,
             )
-            self.food_chips[food] = chip
-            row.add_widget(chip)
-        self.content.add_widget(food_flow)
+
+            # Category header with icon
+            cat_header = MDBoxLayout(
+                orientation="horizontal",
+                adaptive_height=True,
+                padding=[dp(0), dp(8), dp(0), dp(4)],
+            )
+            cat_header.add_widget(MDLabel(
+                text=f"{icon} {cat_name}",
+                font_style="Body2",
+                bold=True,
+                adaptive_height=True,
+                theme_text_color="Custom",
+                text_color=_hex_to_rgba("#424242"),
+            ))
+
+            # Count selected in this category
+            selected_in_cat = len(self.selected_foods.intersection(set(foods)))
+            if selected_in_cat > 0:
+                cat_header.add_widget(MDLabel(
+                    text=f"{selected_in_cat}",
+                    font_style="Caption",
+                    halign="right",
+                    bold=True,
+                    adaptive_height=True,
+                    theme_text_color="Custom",
+                    text_color=_hex_to_rgba("#1565C0"),
+                ))
+
+            self.food_categories_container.add_widget(cat_header)
+            self.food_categories_container.add_widget(panel_content)
+            self._food_category_panels[cat_name] = panel_content
+
+        # Extra foods from food_manager not in predefined categories
+        if extra_foods:
+            visible_extra = self._filter_foods(list(extra_foods))
+            if visible_extra or not self._food_search_text:
+                cat_header = MDBoxLayout(
+                    orientation="horizontal",
+                    adaptive_height=True,
+                    padding=[dp(0), dp(8), dp(0), dp(4)],
+                )
+                cat_header.add_widget(MDLabel(
+                    text="Eigene",
+                    font_style="Body2",
+                    bold=True,
+                    adaptive_height=True,
+                ))
+                self.food_categories_container.add_widget(cat_header)
+                extra_content = _FoodCategoryContent(
+                    foods=visible_extra if visible_extra else sorted(extra_foods),
+                    food_chips_ref=self.food_chips,
+                    selected_foods=self.selected_foods,
+                    toggle_callback=self._toggle_food,
+                )
+                self.food_categories_container.add_widget(extra_content)
+
+    def _filter_foods(self, foods: list) -> list:
+        if not self._food_search_text:
+            return foods
+        search = self._food_search_text.lower()
+        return [f for f in foods if search in f.lower()]
+
+    def _on_food_search(self, instance, text):
+        self._food_search_text = text.strip()
+        self._build_food_categories()
 
     def _toggle_food(self, food: str, active: bool):
         if active:
             self.selected_foods.add(food)
         else:
             self.selected_foods.discard(food)
+        self._update_food_count()
+        self._update_selected_foods_display()
 
-    # ── Trigger sections ────────────────────────────────────────────────────────
+    def _update_food_count(self):
+        count = len(self.selected_foods)
+        self.food_count_label.text = f"{count} ausgewählt"
+
+    def _update_selected_foods_display(self):
+        """Show a compact row of selected food emojis."""
+        self.selected_foods_row.clear_widgets()
+        if self.selected_foods:
+            emojis = []
+            for f in sorted(self.selected_foods)[:8]:
+                emoji = FOOD_EMOJIS.get(f, "")
+                emojis.append(f"{emoji}")
+            text = " ".join(emojis)
+            if len(self.selected_foods) > 8:
+                text += f" +{len(self.selected_foods) - 8}"
+            self.selected_foods_row.add_widget(MDLabel(
+                text=text,
+                font_style="Body2",
+                adaptive_height=True,
+            ))
+
+    # ── Trigger sections ─────────────────────────────────────────────────────
 
     def _build_trigger_sections(self):
         sm = self.settings_manager
 
         # Stress
         if sm.is_module_enabled("stress"):
-            self.content.add_widget(
-                MDLabel(text="😰 Stresslevel", font_style="Subtitle1", bold=True, adaptive_height=True)
+            card = _SectionCard()
+            card.add_widget(MDLabel(
+                text="😰 Stresslevel",
+                font_style="Subtitle1",
+                bold=True,
+                adaptive_height=True,
+            ))
+            row = MDBoxLayout(
+                orientation="horizontal",
+                adaptive_height=True,
+                spacing=dp(8),
+                padding=[dp(0), dp(8), dp(0), dp(4)],
             )
-            row = MDBoxLayout(orientation="horizontal", adaptive_height=True, spacing=dp(8))
             self.stress_buttons = []
             for i in range(1, 6):
                 btn = MDRaisedButton(
                     text=str(i),
-                    size_hint=(None, None),
-                    size=(dp(52), dp(52)),
-                    md_bg_color=_hex_to_rgba("#E0E0E0"),
+                    size_hint=(1, None),
+                    height=dp(44),
+                    md_bg_color=_hex_to_rgba("#F5F5F5"),
                     on_release=lambda _, s=i: self._set_stress(s),
                 )
                 btn._val = i
                 self.stress_buttons.append(btn)
                 row.add_widget(btn)
-            self.content.add_widget(row)
-            self.content.add_widget(MDLabel(
+            card.add_widget(row)
+            card.add_widget(MDLabel(
                 text="1 = entspannt — 5 = extremer Stress",
-                theme_text_color="Secondary", font_style="Caption", adaptive_height=True,
+                theme_text_color="Secondary",
+                font_style="Caption",
+                adaptive_height=True,
             ))
-            self.content.add_widget(MDSeparator(height=dp(1)))
+            self.content.add_widget(card)
 
         # Fungal
         if sm.is_module_enabled("fungal"):
-            self.content.add_widget(
-                MDLabel(text="🍄 Zehenpilz (Mykose)", font_style="Subtitle1", bold=True, adaptive_height=True)
-            )
+            card = _SectionCard()
+            card.add_widget(MDLabel(
+                text="🍄 Zehenpilz (Mykose)",
+                font_style="Subtitle1",
+                bold=True,
+                adaptive_height=True,
+            ))
             self.fungal_chip = MDChip(
                 text="Zehenpilz aktuell aktiv",
                 type="filter",
                 active=False,
                 on_active=lambda inst, val: setattr(self, "fungal_active", val),
             )
-            self.content.add_widget(self.fungal_chip)
-            self.content.add_widget(MDLabel(
-                text="Zehenpilz kann Id-Reaktion an den Händen auslösen",
-                theme_text_color="Secondary", font_style="Caption", adaptive_height=True,
+            card.add_widget(self.fungal_chip)
+            card.add_widget(MDLabel(
+                text="Kann Id-Reaktion an den Händen auslösen",
+                theme_text_color="Secondary",
+                font_style="Caption",
+                adaptive_height=True,
             ))
-            self.content.add_widget(MDSeparator(height=dp(1)))
+            self.content.add_widget(card)
 
         # Sleep
         if sm.is_module_enabled("sleep"):
-            self.content.add_widget(
-                MDLabel(text="😴 Schlafqualität", font_style="Subtitle1", bold=True, adaptive_height=True)
+            card = _SectionCard()
+            card.add_widget(MDLabel(
+                text="😴 Schlafqualität",
+                font_style="Subtitle1",
+                bold=True,
+                adaptive_height=True,
+            ))
+            row = MDBoxLayout(
+                orientation="horizontal",
+                adaptive_height=True,
+                spacing=dp(8),
+                padding=[dp(0), dp(8), dp(0), dp(4)],
             )
-            row = MDBoxLayout(orientation="horizontal", adaptive_height=True, spacing=dp(8))
             self.sleep_buttons = []
             for i in range(1, 6):
                 btn = MDRaisedButton(
                     text=str(i),
-                    size_hint=(None, None),
-                    size=(dp(52), dp(52)),
-                    md_bg_color=_hex_to_rgba("#E0E0E0"),
+                    size_hint=(1, None),
+                    height=dp(44),
+                    md_bg_color=_hex_to_rgba("#F5F5F5"),
                     on_release=lambda _, s=i: self._set_sleep(s),
                 )
                 btn._val = i
                 self.sleep_buttons.append(btn)
                 row.add_widget(btn)
-            self.content.add_widget(row)
-            self.content.add_widget(MDLabel(
+            card.add_widget(row)
+            card.add_widget(MDLabel(
                 text="1 = schlecht geschlafen — 5 = ausgezeichnet",
-                theme_text_color="Secondary", font_style="Caption", adaptive_height=True,
+                theme_text_color="Secondary",
+                font_style="Caption",
+                adaptive_height=True,
             ))
-            self.content.add_widget(MDSeparator(height=dp(1)))
+            self.content.add_widget(card)
 
         # Weather
         if sm.is_module_enabled("weather"):
-            self.content.add_widget(
-                MDLabel(text="🌤 Wetter / Umgebung", font_style="Subtitle1", bold=True, adaptive_height=True)
+            card = _SectionCard()
+            card.add_widget(MDLabel(
+                text="🌤 Wetter / Umgebung",
+                font_style="Subtitle1",
+                bold=True,
+                adaptive_height=True,
+            ))
+            weather_flow = MDBoxLayout(
+                orientation="vertical",
+                adaptive_height=True,
+                spacing=dp(4),
+                padding=[dp(0), dp(4), dp(0), dp(0)],
             )
-            weather_flow = MDBoxLayout(orientation="vertical", adaptive_height=True, spacing=dp(4))
             row = None
             for idx, opt in enumerate(WEATHER_OPTIONS):
                 if idx % 2 == 0:
-                    row = MDBoxLayout(orientation="horizontal", adaptive_height=True, spacing=dp(4))
+                    row = MDBoxLayout(
+                        orientation="horizontal",
+                        adaptive_height=True,
+                        spacing=dp(4),
+                    )
                     weather_flow.add_widget(row)
                 chip = MDChip(
                     text=opt,
@@ -328,33 +623,50 @@ class EntryScreen(MDScreen):
                 )
                 self.weather_chips[opt] = chip
                 row.add_widget(chip)
-            self.content.add_widget(weather_flow)
-            self.content.add_widget(MDSeparator(height=dp(1)))
+            card.add_widget(weather_flow)
+            self.content.add_widget(card)
 
         # Sweating
         if sm.is_module_enabled("sweating"):
-            self.content.add_widget(
-                MDLabel(text="💧 Schwitzen", font_style="Subtitle1", bold=True, adaptive_height=True)
-            )
+            card = _SectionCard()
+            card.add_widget(MDLabel(
+                text="💧 Schwitzen",
+                font_style="Subtitle1",
+                bold=True,
+                adaptive_height=True,
+            ))
             self.sweating_chip = MDChip(
                 text="Starkes Schwitzen heute",
                 type="filter",
                 active=False,
                 on_active=lambda inst, val: setattr(self, "sweating_active", val),
             )
-            self.content.add_widget(self.sweating_chip)
-            self.content.add_widget(MDSeparator(height=dp(1)))
+            card.add_widget(self.sweating_chip)
+            self.content.add_widget(card)
 
         # Contact
         if sm.is_module_enabled("contact"):
-            self.content.add_widget(
-                MDLabel(text="🧤 Kontaktexposition", font_style="Subtitle1", bold=True, adaptive_height=True)
+            card = _SectionCard()
+            card.add_widget(MDLabel(
+                text="🧤 Kontaktexposition",
+                font_style="Subtitle1",
+                bold=True,
+                adaptive_height=True,
+            ))
+            contact_flow = MDBoxLayout(
+                orientation="vertical",
+                adaptive_height=True,
+                spacing=dp(4),
+                padding=[dp(0), dp(4), dp(0), dp(0)],
             )
-            contact_flow = MDBoxLayout(orientation="vertical", adaptive_height=True, spacing=dp(4))
             row = None
             for idx, item in enumerate(CONTACT_SUGGESTIONS):
                 if idx % 2 == 0:
-                    row = MDBoxLayout(orientation="horizontal", adaptive_height=True, spacing=dp(4))
+                    row = MDBoxLayout(
+                        orientation="horizontal",
+                        adaptive_height=True,
+                        spacing=dp(4),
+                    )
                     contact_flow.add_widget(row)
                 chip = MDChip(
                     text=item,
@@ -364,8 +676,8 @@ class EntryScreen(MDScreen):
                 )
                 self.contact_chips[item] = chip
                 row.add_widget(chip)
-            self.content.add_widget(contact_flow)
-            self.content.add_widget(MDSeparator(height=dp(1)))
+            card.add_widget(contact_flow)
+            self.content.add_widget(card)
 
     def _set_stress(self, level: int):
         self.current_stress = level
@@ -379,11 +691,11 @@ class EntryScreen(MDScreen):
         for btn in buttons:
             i = btn._val
             if i == current_val:
-                btn.md_bg_color = _hex_to_rgba("#2196F3")
+                btn.md_bg_color = _hex_to_rgba("#1565C0")
                 btn.text_color = [1, 1, 1, 1]
             else:
-                btn.md_bg_color = _hex_to_rgba("#E0E0E0")
-                btn.text_color = [0, 0, 0, 0.87]
+                btn.md_bg_color = _hex_to_rgba("#F5F5F5")
+                btn.text_color = [0.2, 0.2, 0.2, 1]
 
     def _toggle_weather(self, weather: str, active: bool):
         if active:
@@ -401,34 +713,45 @@ class EntryScreen(MDScreen):
         else:
             self.selected_contacts.discard(item)
 
-    # ── Notes section ───────────────────────────────────────────────────────────
+    # ── Notes section ────────────────────────────────────────────────────────
 
     def _build_notes_section(self):
-        self.content.add_widget(
-            MDLabel(text="Notizen", font_style="Subtitle1", bold=True, adaptive_height=True)
-        )
+        card = _SectionCard()
+
+        card.add_widget(MDLabel(
+            text="Notizen",
+            font_style="Subtitle1",
+            bold=True,
+            adaptive_height=True,
+        ))
         self.skin_notes_input = MDTextField(
             hint_text="Hautzustand (z.B. Rötungen, Juckreiz...)",
             mode="rectangle",
             multiline=True,
             size_hint_y=None,
-            height=dp(80),
+            height=dp(72),
         )
-        self.content.add_widget(self.skin_notes_input)
+        card.add_widget(self.skin_notes_input)
 
         self.food_notes_input = MDTextField(
             hint_text="Ernährung (z.B. Menge, Zubereitung...)",
             mode="rectangle",
             multiline=True,
             size_hint_y=None,
-            height=dp(80),
+            height=dp(72),
         )
-        self.content.add_widget(self.food_notes_input)
+        card.add_widget(self.food_notes_input)
 
-    # ── Date navigation ─────────────────────────────────────────────────────────
+        self.content.add_widget(card)
+
+    # ── Date navigation ──────────────────────────────────────────────────────
 
     def _change_day(self, delta: int):
         self.current_date += timedelta(days=delta)
+        self._load_date(self.current_date)
+
+    def _go_today(self):
+        self.current_date = date.today()
         self._load_date(self.current_date)
 
     def _load_date(self, d: date):
@@ -441,10 +764,17 @@ class EntryScreen(MDScreen):
         self.date_label.text = f"{d.day}. {months[d.month - 1]} {d.year}"
         self.weekday_label.text = weekdays[d.weekday()]
 
+        # Highlight today
+        if d == date.today():
+            self.date_label.theme_text_color = "Custom"
+            self.date_label.text_color = _hex_to_rgba("#1565C0")
+        else:
+            self.date_label.theme_text_color = "Primary"
+
         entry = self.data_manager.get_entry(d)
         self._populate_from_entry(entry)
 
-    def _populate_from_entry(self, entry: Optional[DayEntry]):
+    def _populate_from_entry(self, entry):
         # Reset all state
         self.current_severity = None
         self.current_stress = None
@@ -472,6 +802,10 @@ class EntryScreen(MDScreen):
         if hasattr(self, "sweating_chip") and self.sweating_chip.active:
             self.sweating_chip.active = False
 
+        # Reset search
+        self.food_search.text = ""
+        self._food_search_text = ""
+
         if entry:
             self.current_severity = entry.severity
             self.current_stress = entry.stress_level
@@ -484,10 +818,9 @@ class EntryScreen(MDScreen):
             self.skin_notes_input.text = entry.skin_notes or ""
             self.food_notes_input.text = entry.food_notes or ""
 
-            # Activate food chips
-            for food in entry.foods:
-                if food in self.food_chips:
-                    self.food_chips[food].active = True
+            # Rebuild food categories to reflect selected state
+            self._build_food_categories()
+
             # Weather
             if entry.weather and entry.weather in self.weather_chips:
                 self.weather_chips[entry.weather].active = True
@@ -503,14 +836,17 @@ class EntryScreen(MDScreen):
             self.delete_btn.opacity = 1
             self.delete_btn.disabled = False
         else:
+            self._build_food_categories()
             self.delete_btn.opacity = 0
             self.delete_btn.disabled = True
 
         self._update_severity_buttons()
         self._update_button_group(self.stress_buttons, self.current_stress)
         self._update_button_group(self.sleep_buttons, self.current_sleep)
+        self._update_food_count()
+        self._update_selected_foods_display()
 
-    # ── Save / Delete ───────────────────────────────────────────────────────────
+    # ── Save / Delete ────────────────────────────────────────────────────────
 
     def save_entry(self):
         if self.current_severity is None:
@@ -534,16 +870,16 @@ class EntryScreen(MDScreen):
 
         self.delete_btn.opacity = 1
         self.delete_btn.disabled = False
-        Snackbar(text="✓ Gespeichert").open()
+        Snackbar(text="Gespeichert").open()
 
     def delete_entry(self):
         if not self.data_manager.get_entry(self.current_date):
             return
         self.data_manager.delete_entry(self.current_date)
         self._populate_from_entry(None)
-        Snackbar(text="✓ Eintrag gelöscht").open()
+        Snackbar(text="Eintrag gelöscht").open()
 
-    # ── Refresh on tab switch ───────────────────────────────────────────────────
+    # ── Refresh on tab switch ────────────────────────────────────────────────
 
     def on_enter_screen(self):
         self._load_date(self.current_date)
